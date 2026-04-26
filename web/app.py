@@ -11,44 +11,26 @@ app = Flask(__name__)
 class SystemState:
     def __init__(self):
         self.mode = os.getenv("CONTROL_MODE", "SIM")
-        if self.mode == "MODBUS":
-            self.collector = ModbusCollector(host="127.0.0.1", port=502)
-            from control.air import AirController
-            from control.soil import SoilController
-            self.control = SystemControl()
-            self.control.air = AirController(mode="MODBUS", client=self.collector.client)
-            self.control.soil = SoilController(mode="MODBUS", client=self.collector.client)
-        else:
-            self.collector = SimulatedCollector()
-            self.control = SystemControl()
-        
-        self.current_data = {}
+        self.collector = ModbusCollector() if self.mode == "MODBUS" else SimulatedCollector()
+        self.control = SystemControl()
         self.db = DatabaseManager()
+        self.current_data = {}
         self.running = True
 
 state = SystemState()
 
 def control_loop():
-    count = 0
     while state.running:
         data = state.collector.collect_signals()
-        if "error" in data:
-            state.current_data = {"error": data["error"], "status": "Disconnected"}
-            time.sleep(5)
-            continue
-            
-        data["status"] = "Connected"
-        state.current_data = data
-        state.control.process(data, collector=state.collector)
-        
-        count += 1
-        if count >= 5: 
-            state.db.save_data(data)
-            count = 0
+        if "error" not in data:
+            data["status"] = "Connected"
+            state.current_data = data
+            state.control.process(data, collector=state.collector)
         time.sleep(2)
 
 @app.route('/')
 def index():
+    settings = state.control.get_settings()
     return """
     <!DOCTYPE html>
     <html>
@@ -56,101 +38,64 @@ def index():
         <title>스마트 온실 통합 제어 시스템</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
-            body { font-family: 'Malgun Gothic', sans-serif; margin: 40px; background-color: #f0f4f0; color: #333; }
-            .container { max-width: 1000px; margin: auto; }
+            body { font-family: 'Malgun Gothic', sans-serif; margin: 40px; background-color: #f4f7f4; color: #333; }
+            .container { max-width: 1200px; margin: auto; }
             .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 25px; }
-            .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+            .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+            .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
             .data-box { text-align: center; padding: 15px; background: #f9fdf9; border-radius: 10px; border: 1px solid #e0eee0; }
-            .data-point { font-size: 24px; font-weight: bold; color: #2e7d32; margin-top: 5px; }
-            .label { color: #777; font-size: 13px; font-weight: bold; }
-            .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
-            .status-ok { background: #e8f5e9; color: #2e7d32; }
-            .status-err { background: #ffebee; color: #c62828; }
-            .actuator-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-            .actuator-item { display: flex; justify-content: space-between; padding: 10px; background: #fff; border-bottom: 1px solid #eee; }
-            .act-on { color: #2196f3; font-weight: bold; }
-            h1, h2 { color: #1b5e20; }
-            button { padding: 10px 25px; cursor: pointer; background-color: #4caf50; color: white; border: none; border-radius: 5px; font-weight: bold; }
+            .data-point { font-size: 24px; font-weight: bold; color: #2e7d32; }
+            .label { color: #777; font-size: 13px; font-weight: bold; margin-bottom: 5px; }
+            h1, h2 { color: #1b5e20; border-left: 5px solid #4caf50; padding-left: 10px; }
+            .input-group { margin-bottom: 15px; }
+            label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; }
+            input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+            button { width: 100%; padding: 12px; background: #2e7d32; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+            .status-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>🌿 스마트 온실 통합 모니터링</h1>
+            <h1>🌿 Berry_WHAT 정밀 환경제어</h1>
             
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h2>장치 연결 및 구동 상태</h2>
-                    <div>
-                        작동 모드: <b id="mode-text">SIM</b>
-                        <span id="conn-status" class="status-badge status-ok">연결됨</span>
+            <div class="grid-2">
+                <!-- 실시간 상태 섹션 -->
+                <div>
+                    <div class="card">
+                        <h2>환경 모니터링</h2>
+                        <div class="grid-4">
+                            <div class="data-box"><div class="label">온도</div><div id="temp" class="data-point">--</div></div>
+                            <div class="data-box"><div class="label">포차(VPD)</div><div id="vpd" class="data-point">--</div></div>
+                            <div class="data-box"><div class="label">일사적산</div><div id="solar_acc" class="data-point">--</div></div>
+                            <div class="data-box"><div class="label">토양수분</div><div id="moisture" class="data-point">--</div></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h2>구동기 작동 상태</h2>
+                        <div id="actuators"></div>
                     </div>
                 </div>
-                <div class="actuator-grid">
-                    <div class="actuator-item"><span>천창/측창</span> <span id="act-vents">--</span></div>
-                    <div class="actuator-item"><span>환풍팬</span> <span id="act-fans">--</span></div>
-                    <div class="actuator-item"><span>히터</span> <span id="act-heater">--</span></div>
-                    <div class="actuator-item"><span>관수 펌프</span> <span id="act-irrigation">--</span></div>
-                </div>
-            </div>
 
-            <div class="card">
-                <h2>실시간 환경 데이터</h2>
-                <div class="grid">
-                    <div class="data-box"><div class="label">온도</div><div id="temp" class="data-point">--</div></div>
-                    <div class="data-box"><div class="label">VPD</div><div id="vpd" class="data-point">--</div></div>
-                    <div class="data-box"><div class="label">일사 적산</div><div id="solar_acc" class="data-point">--</div></div>
-                    <div class="data-box"><div class="label">토양 수분</div><div id="moisture" class="data-point">--</div></div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>환경 데이터 추이</h2>
-                <div style="height:250px;"><canvas id="envChart"></canvas></div>
-            </div>
-
-            <div class="card">
-                <h2>제어 설정</h2>
-                <div style="display:flex; gap:20px;">
-                    <div><label class="label">일사 적산 (J/cm²)</label><br><input type="number" id="solar_threshold" value="150" style="padding:8px; width:80px;"></div>
-                    <div><label class="label">최저 수분 (%)</label><br><input type="number" id="moisture_threshold" value="30" style="padding:8px; width:80px;"></div>
-                    <button onclick="updateSettings()" style="margin-top:20px;">저장</button>
+                <!-- 설정 섹션 -->
+                <div class="card">
+                    <h2>양액기 및 관수 세부 설정</h2>
+                    <div class="grid-2">
+                        <div class="input-group"><label>관수 시작 시간</label><input type="time" id="start_time" value="08:00"></div>
+                        <div class="input-group"><label>관수 종료 시간</label><input type="time" id="end_time" value="18:00"></div>
+                        <div class="input-group"><label>목표 EC (dS/m)</label><input type="number" id="target_ec" value="2.5" step="0.1"></div>
+                        <div class="input-group"><label>목표 pH</label><input type="number" id="target_ph" value="5.8" step="0.1"></div>
+                        <div class="input-group"><label>일사 임계치 (J/cm²)</label><input type="number" id="solar_threshold" value="150"></div>
+                        <div class="input-group"><label>최저 수분 (%)</label><input type="number" id="min_moisture" value="30"></div>
+                        <div class="input-group"><label>1회 관수 시간 (초)</label><input type="number" id="duration" value="60"></div>
+                        <div class="input-group"><label>관수 간격 (분)</label><input type="number" id="interval" value="15"></div>
+                    </div>
+                    <button onclick="saveSettings()">설정 저장 및 시스템 적용</button>
                 </div>
             </div>
         </div>
 
         <script>
-            let chart;
-            function initChart() {
-                const ctx = document.getElementById('envChart').getContext('2d');
-                chart = new Chart(ctx, {
-                    type: 'line',
-                    data: { labels: [], datasets: [
-                        { label: '온도 (°C)', data: [], borderColor: '#ff7043', tension: 0.3, yAxisID: 'y' },
-                        { label: '수분 (%)', data: [], borderColor: '#42a5f5', tension: 0.3, yAxisID: 'y1' }
-                    ]},
-                    options: { responsive: true, maintainAspectRatio: false, scales: {
-                        y: { type: 'linear', position: 'left' },
-                        y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } }
-                    }}
-                });
-            }
-
             function updateUI() {
-                fetch('/api/status').then(r => r.json()).then(status => {
-                    document.getElementById('mode-text').innerText = status.mode;
-                    const conn = document.getElementById('conn-status');
-                    conn.innerText = status.connection;
-                    conn.className = 'status-badge ' + (status.connection === 'Connected' ? 'status-ok' : 'status-err');
-                    
-                    for (const [key, val] of Object.entries(status.actuators)) {
-                        const el = document.getElementById('act-' + key);
-                        if (el) {
-                            el.innerText = val;
-                            el.className = (val !== 'Off' && val !== 'Closed') ? 'act-on' : '';
-                        }
-                    }
-                });
-
                 fetch('/api/data').then(r => r.json()).then(data => {
                     if(data.temp) {
                         document.getElementById('temp').innerText = data.temp + '°C';
@@ -160,25 +105,33 @@ def index():
                     }
                 });
 
-                fetch('/api/history').then(r => r.json()).then(history => {
-                    chart.data.labels = history.map(h => h.timestamp.split(' ')[1]);
-                    chart.data.datasets[0].data = history.map(h => h.temp);
-                    chart.data.datasets[1].data = history.map(h => h.moisture);
-                    chart.update('none');
+                fetch('/api/status').then(r => r.json()).then(status => {
+                    let html = '';
+                    for (const [key, val] of Object.entries(status.actuators)) {
+                        html += `<div class="status-item"><span>${key}</span><b>${val}</b></div>`;
+                    }
+                    document.getElementById('actuators').innerHTML = html;
                 });
             }
 
-            function updateSettings() {
-                const solar = document.getElementById('solar_threshold').value;
-                const moisture = document.getElementById('moisture_threshold').value;
+            function saveSettings() {
+                const settings = {
+                    start_time: document.getElementById('start_time').value,
+                    end_time: document.getElementById('end_time').value,
+                    target_ec: parseFloat(document.getElementById('target_ec').value),
+                    target_ph: parseFloat(document.getElementById('target_ph').value),
+                    solar_threshold: parseFloat(document.getElementById('solar_threshold').value),
+                    min_moisture: parseFloat(document.getElementById('min_moisture').value),
+                    duration: parseInt(document.getElementById('duration').value),
+                    interval: parseInt(document.getElementById('interval').value)
+                };
                 fetch('/api/settings', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ solar_threshold: parseFloat(solar), moisture_threshold: parseFloat(moisture) })
-                }).then(() => alert('저장됨'));
+                    body: JSON.stringify(settings)
+                }).then(() => alert('양액기 설정이 적용되었습니다.'));
             }
 
-            initChart();
             setInterval(updateUI, 2000);
         </script>
     </body>
@@ -187,23 +140,15 @@ def index():
 
 @app.route('/api/status')
 def get_status():
-    return jsonify({
-        "mode": state.mode,
-        "connection": state.current_data.get("status", "Unknown"),
-        "actuators": state.control.get_actuator_status()
-    })
+    return jsonify({"actuators": state.control.get_actuator_status()})
 
 @app.route('/api/data')
 def get_data():
     return jsonify(state.current_data)
 
-@app.route('/api/history')
-def get_history():
-    return jsonify(state.db.get_history(20))
-
 @app.route('/api/settings', methods=['POST'])
 def set_settings():
-    state.control.update_setpoints(request.json)
+    state.control.update_settings(request.json)
     return jsonify({"status": "success"})
 
 if __name__ == '__main__':
