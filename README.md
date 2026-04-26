@@ -1,16 +1,53 @@
-# Berry_WHAT
+# 🌿 Berry_WHAT: 스마트 온실 제어 시스템
 
-A Python project created for the user.
+Berry_WHAT은 정밀 농업을 위한 오픈소스 스마트 온실 제어 솔루션입니다. 온도, 습도, 포차(VPD), 일사량을 실시간으로 분석하여 최적의 생육 환경을 자동으로 유지합니다.
 
-## Description
-This project is a boilerplate for Python applications, initialized as a local Git repository.
+## 🚀 주요 기능
 
-## Installation
+### 1. 정밀 환경 제어
+- **데드밴드(Deadband) 온도 제어**: 설정 온도와 실제 온도의 차이를 분석하여 환기창, 팬, 히터를 자동 구동합니다.
+- **VPD(포차) 기반 습도 관리**: 식물의 증산 작용을 최적화하기 위해 VPD를 실시간 계산하고 관리합니다.
+
+### 2. 호겐도른(Hoogendoorn) 방식 관수 시스템
+- **일사 적산 제어 (Solar Summation)**: 누적된 광에너지를 계산하여 식물이 실제로 필요한 시점에 관수를 수행합니다.
+- **수분 임계값 안전 제어**: 토양 수분이 일정 수준 이하로 떨어질 경우 즉시 관수하여 작물을 보호합니다.
+
+### 3. 실시간 웹 대시보드
+- **한글화된 UI**: 누구나 쉽게 이해할 수 있는 직관적인 대시보드를 제공합니다.
+- **데이터 시각화**: Chart.js를 이용해 온도 및 수분 변화 추이를 그래프로 표시합니다.
+- **실시간 설정 변경**: 웹 UI에서 즉시 제어 임계값(온도, 일사량 등)을 수정하고 적용할 수 있습니다.
+
+### 4. 데이터 분석 및 저장
+- **SQLite DB 연동**: 모든 센서 데이터를 로컬 데이터베이스에 저장하여 이력 관리 및 분석이 가능합니다.
+
+## 🛠 설치 및 실행 방법
+
+### 1. 필수 환경
+- Python 3.12+
+- Flask (웹 대시보드 사용 시)
+
+### 2. 의존성 설치
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
-```bash
-python3 main.py
-```
+### 3. 실행 모드
+- **웹 대시보드 모드 (권장)**:
+  ```bash
+  python3 main.py --web
+  ```
+  실행 후 브라우저에서 `http://localhost:5000`에 접속하세요.
+
+- **CLI 모드 (백그라운드 로직 실행)**:
+  ```bash
+  python3 main.py
+  ```
+
+## 📂 프로젝트 구조
+- `core/`: 시스템 제어 엔진, DB 관리 및 핵심 로직
+- `interface/`: 센서 데이터 수집 및 물리 인터페이스 레이어
+- `control/`: 구동부(환기, 관수 등) 제어 모듈
+- `web/`: Flask 기반 웹 서버 및 UI 소스
+
+## 📄 시스템 구조도
+상세한 시스템 아키텍처는 [architecture.md](./architecture.md) 및 [diagram.md](./diagram.md) 파일을 참조하세요.
