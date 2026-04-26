@@ -1,17 +1,31 @@
 from flask import Flask, render_template, jsonify, request
 import threading
 import time
+import os
 from core.logic import SystemControl
-from interface.collector import DataCollector
+from interface.collector import SimulatedCollector, ModbusCollector
 from core.db import DatabaseManager
 
 app = Flask(__name__)
 
 class SystemState:
     def __init__(self):
+        # 환경 변수나 설정에 따라 모드 결정 (기본값: SIM)
+        self.mode = os.getenv("CONTROL_MODE", "SIM")
+        
+        if self.mode == "MODBUS":
+            self.collector = ModbusCollector(host="127.0.0.1", port=502)
+            # Modbus 클라이언트를 제어부와 공유
+            from control.air import AirController
+            from control.soil import SoilController
+            self.control = SystemControl()
+            self.control.air = AirController(mode="MODBUS", client=self.collector.client)
+            self.control.soil = SoilController(mode="MODBUS", client=self.collector.client)
+        else:
+            self.collector = SimulatedCollector()
+            self.control = SystemControl()
+        
         self.current_data = {}
-        self.control = SystemControl()
-        self.collector = DataCollector()
         self.db = DatabaseManager()
         self.running = True
 
@@ -21,20 +35,24 @@ def control_loop():
     count = 0
     while state.running:
         data = state.collector.collect_signals()
+        if "error" in data:
+            print(f"[System] {data['error']}")
+            time.sleep(5)
+            continue
+            
         state.current_data = data
         state.control.process(data, collector=state.collector)
         
-        # 10초마다 DB에 저장 (데이터 양 조절)
         count += 1
         if count >= 5: 
             state.db.save_data(data)
             count = 0
-            
         time.sleep(2)
 
+# ... (기존 API 엔드포인트 및 index() 함수 동일)
 @app.route('/')
 def index():
-    return """
+    return f"<!-- Mode: {state.mode} -->" + """
     <!DOCTYPE html>
     <html>
     <head>
@@ -59,7 +77,7 @@ def index():
     <body>
         <div class="container">
             <h1>🌿 스마트 온실 통합 모니터링</h1>
-            
+            <div style="text-align:right; font-size:12px; color:#666;">작동 모드: """ + state.mode + """</div>
             <div class="card">
                 <h2>현재 환경 상태</h2>
                 <div class="grid">
@@ -134,10 +152,14 @@ def index():
                 fetch('/api/data')
                     .then(r => r.json())
                     .then(data => {
-                        document.getElementById('temp').innerText = data.temp + '°C';
-                        document.getElementById('vpd').innerText = data.vpd + ' kPa';
-                        document.getElementById('solar_acc').innerText = data.solar_accumulation;
-                        document.getElementById('moisture').innerText = data.moisture + '%';
+                        if (data.error) {
+                            console.error(data.error);
+                            return;
+                        }
+                        document.getElementById('temp').innerText = (data.temp || 0) + '°C';
+                        document.getElementById('vpd').innerText = (data.vpd || 0) + ' kPa';
+                        document.getElementById('solar_acc').innerText = data.solar_accumulation || 0;
+                        document.getElementById('moisture').innerText = (data.moisture || 0) + '%';
                     });
                 
                 fetch('/api/history')
