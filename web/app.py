@@ -6,7 +6,6 @@ from interface.collector import DataCollector
 
 app = Flask(__name__)
 
-# Global state for sharing between control loop and web server
 class SystemState:
     def __init__(self):
         self.current_data = {}
@@ -20,8 +19,8 @@ def control_loop():
     while state.running:
         data = state.collector.collect_signals()
         state.current_data = data
-        state.control.process(data)
-        time.sleep(5) # 5-second interval for logic processing
+        state.control.process(data, collector=state.collector)
+        time.sleep(2)
 
 @app.route('/')
 def index():
@@ -29,47 +28,88 @@ def index():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Berry_WHAT Greenhouse Dashboard</title>
+        <title>Hoogendoorn Control Dashboard</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f4f9; }
-            .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-            .data-point { font-size: 24px; font-weight: bold; color: #2e7d32; }
-            button { padding: 10px 20px; cursor: pointer; background-color: #2e7d32; color: white; border: none; border-radius: 4px; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #e8f5e9; }
+            .container { max-width: 800px; margin: auto; }
+            .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+            .data-point { font-size: 28px; font-weight: bold; color: #1b5e20; }
+            .label { color: #666; font-size: 14px; text-transform: uppercase; }
+            h1 { color: #2e7d32; text-align: center; }
+            .control-group { margin-top: 15px; }
+            input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100px; }
+            button { padding: 10px 20px; cursor: pointer; background-color: #43a047; color: white; border: none; border-radius: 4px; font-weight: bold; }
+            button:hover { background-color: #2e7d32; }
         </style>
     </head>
     <body>
-        <h1>Greenhouse Monitoring & Control</h1>
-        <div class="card">
-            <h2>Current Status</h2>
-            <div id="data">Loading...</div>
+        <div class="container">
+            <h1>Greenhouse Smart Control</h1>
+            
+            <div class="card">
+                <h2>Real-time Monitoring</h2>
+                <div class="grid">
+                    <div>
+                        <div class="label">Temperature</div>
+                        <div id="temp" class="data-point">--</div>
+                    </div>
+                    <div>
+                        <div class="label">VPD</div>
+                        <div id="vpd" class="data-point">--</div>
+                    </div>
+                    <div>
+                        <div class="label">Solar Accumulation</div>
+                        <div id="solar_acc" class="data-point">--</div>
+                        <div class="label" style="font-size: 10px;">J/cm²</div>
+                    </div>
+                    <div>
+                        <div class="label">Soil Moisture</div>
+                        <div id="moisture" class="data-point">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Irrigation Settings (Hoogendoorn Logic)</h2>
+                <div class="control-group">
+                    <label>Solar Sum Threshold (J/cm²): </label>
+                    <input type="number" id="solar_threshold" value="150">
+                </div>
+                <div class="control-group">
+                    <label>Min Soil Moisture (%): </label>
+                    <input type="number" id="moisture_threshold" value="30">
+                </div>
+                <div class="control-group">
+                    <button onclick="updateSettings()">Apply Control Rules</button>
+                </div>
+            </div>
         </div>
-        <div class="card">
-            <h2>Control Settings</h2>
-            <label>Target Temp: </label>
-            <input type="number" id="temp_target" value="22" step="0.5">
-            <button onclick="updateSettings()">Update</button>
-        </div>
+
         <script>
             function fetchData() {
                 fetch('/api/data')
                     .then(response => response.json())
                     .then(data => {
-                        document.getElementById('data').innerHTML = 
-                            '<p>Temperature: <span class="data-point">' + data.temp + 'C</span></p>' +
-                            '<p>Humidity: <span class="data-point">' + data.humidity + '%</span></p>' +
-                            '<p>VPD: <span class="data-point">' + data.vpd + ' kPa</span></p>' +
-                            '<p>Soil Moisture: <span class="data-point">' + data.moisture + '%</span></p>';
+                        document.getElementById('temp').innerText = data.temp + '°C';
+                        document.getElementById('vpd').innerText = data.vpd + ' kPa';
+                        document.getElementById('solar_acc').innerText = data.solar_accumulation;
+                        document.getElementById('moisture').innerText = data.moisture + '%';
                     });
             }
             function updateSettings() {
-                const temp = document.getElementById('temp_target').value;
+                const solar = document.getElementById('solar_threshold').value;
+                const moisture = document.getElementById('moisture_threshold').value;
                 fetch('/api/settings', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({target_temp: parseFloat(temp)})
-                }).then(() => alert('Settings Updated'));
+                    body: JSON.stringify({
+                        solar_threshold: parseFloat(solar),
+                        moisture_threshold: parseFloat(moisture)
+                    })
+                }).then(() => alert('Hoogendoorn Rules Updated'));
             }
-            setInterval(fetchData, 2000);
+            setInterval(fetchData, 1000);
         </script>
     </body>
     </html>
@@ -81,12 +121,10 @@ def get_data():
 
 @app.route('/api/settings', methods=['POST'])
 def set_settings():
-    new_settings = request.json
-    state.control.update_setpoints(new_settings)
+    state.control.update_setpoints(request.json)
     return jsonify({"status": "success"})
 
 if __name__ == '__main__':
-    # Start the control logic in a background thread
     t = threading.Thread(target=control_loop)
     t.daemon = True
     t.start()

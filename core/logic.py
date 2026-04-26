@@ -11,41 +11,45 @@ class SystemControl:
         self.temp_deadband = 2.0
         self.target_vpd_min = 0.8
         self.target_vpd_max = 1.2
-        self.moisture_threshold = 30.0
+        
+        # Hoogendoorn Style Irrigation Settings
+        self.moisture_threshold = 30.0  # %
+        self.solar_threshold = 150.0    # J/cm2 (Target for irrigation)
 
-    def process(self, data):
+    def process(self, data, collector=None):
         temp = data.get("temp")
-        humidity = data.get("humidity")
-        moisture = data.get("moisture")
         vpd = data.get("vpd")
+        moisture = data.get("moisture")
+        solar_acc = data.get("solar_accumulation")
         
-        print(f"[Logic] Processing: Temp={temp}C, Hum={humidity}%, VPD={vpd}kPa, Soil={moisture}%")
+        print(f"[Logic] Temp: {temp}C, VPD: {vpd}kPa, Soil: {moisture}%, SolarAcc: {solar_acc}J/cm2")
         
-        # 1. Temperature Control
+        # 1. Temperature & Humidity (Air Control)
         if temp > self.target_temp + self.temp_deadband:
             self.air.adjust_environment("OPEN_VENTS")
-            self.air.adjust_environment("START_FANS")
         elif temp < self.target_temp - self.temp_deadband:
             self.air.adjust_environment("CLOSE_VENTS")
-            self.air.adjust_environment("START_HEATER")
-        else:
-            self.air.adjust_environment("OPTIMAL_TEMP_MAINTAINED")
 
-        # 2. Humidity (VPD) Control
-        if vpd < self.target_vpd_min:
-            print("[Logic] VPD too low (Too Humid). Triggering Purge & Reheat.")
-            self.air.adjust_environment("INCREASE_VENTILATION")
-        elif vpd > self.target_vpd_max:
-            print("[Logic] VPD too high (Too Dry). Triggering Fogging/Misting.")
-            self.air.adjust_environment("START_MISTERS")
+        # 2. Irrigation Control (Hoogendoorn Logic)
+        triggered = False
+        # Rule A: Solar Accumulation Threshold
+        if solar_acc >= self.solar_threshold:
+            print(f"[Logic] Solar Sum reached ({solar_acc} >= {self.solar_threshold}). Triggering Irrigation.")
+            triggered = True
+            if collector: collector.reset_solar_accumulation()
+            
+        # Rule B: Critical Soil Moisture (Safety Override)
+        elif moisture < self.moisture_threshold:
+            print(f"[Logic] Soil moisture critical ({moisture}% < {self.moisture_threshold}%). Triggering Irrigation.")
+            triggered = True
 
-        # 3. Irrigation Control
-        if moisture < self.moisture_threshold:
-            self.soil.irrigate(1.0) # 1.0 Liter
+        if triggered:
+            self.soil.irrigate(1.0)
         else:
-            print("[Logic] Soil moisture optimal.")
+            print("[Logic] Irrigation conditions not met.")
 
     def update_setpoints(self, setpoints):
-        if "target_temp" in setpoints: self.target_temp = setpoints["target_temp"]
-        if "moisture_threshold" in setpoints: self.moisture_threshold = setpoints["moisture_threshold"]
+        if "target_temp" in setpoints: self.target_temp = float(setpoints["target_temp"])
+        if "moisture_threshold" in setpoints: self.moisture_threshold = float(setpoints["moisture_threshold"])
+        if "solar_threshold" in setpoints: self.solar_threshold = float(setpoints["solar_threshold"])
         print(f"[Logic] Setpoints updated: {setpoints}")
