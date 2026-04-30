@@ -38,183 +38,234 @@ def index():
     <head>
         <title>Berry_WHAT Precision Control</title>
         <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #2c3e50; color: #ecf0f1; }
-            .header { background: #34495e; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2ecc71; }
-            .time-info { display: flex; gap: 20px; font-size: 14px; }
-            .time-info span b { color: #f1c40f; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #1c2833; color: #ecf0f1; font-size: 14px; }
+            .header { background: #2c3e50; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #27ae60; }
+            .main-container { display: flex; flex-direction: column; gap: 20px; padding: 20px; }
             
-            .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; padding: 10px; }
-            .card { background: #3e4f5f; border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+            .system-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+            .card { background: #2e4053; border-radius: 10px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #34495e; }
+            .card-header { font-size: 18px; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #2ecc71; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+            .card-header .mode-toggle { font-size: 12px; background: #34495e; padding: 4px 8px; border-radius: 4px; cursor: pointer; border: 1px solid #2ecc71; }
+            .card-header .mode-toggle.active { background: #2ecc71; color: #145a32; }
             
-            .gauge-container { display: flex; gap: 10px; margin-bottom: 10px; }
-            .gauge { flex: 1; background: #2c3e50; border-radius: 8px; padding: 15px; border: 1px solid #455a64; text-align: center; }
-            .gauge-title { font-size: 18px; font-weight: bold; color: #2ecc71; text-align: left; }
-            .gauge-value { font-size: 32px; font-weight: bold; margin: 10px 0; color: #fff; }
-            .gauge-targets { font-size: 14px; color: #bdc3c7; display: flex; justify-content: space-around; }
-            .gauge-targets b { color: #e74c3c; }
+            .data-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .data-item { background: #1b2631; padding: 15px; border-radius: 6px; text-align: center; }
+            .data-label { font-size: 12px; color: #bdc3c7; margin-bottom: 5px; }
+            .data-value { font-size: 24px; font-weight: bold; color: #fff; }
+            .data-unit { font-size: 14px; color: #2ecc71; margin-left: 4px; }
 
-            .system-diagram { height: 250px; background: #2c3e50; border-radius: 8px; position: relative; border: 1px solid #455a64; margin-top: 10px; display: flex; justify-content: space-around; align-items: center; padding: 20px; }
-            .component { width: 60px; height: 80px; background: #3498db; border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; text-align: center; color: white; border: 2px solid #2980b9; }
-            .component.pump { width: 40px; height: 40px; border-radius: 50%; background: #9b59b6; border: 2px solid #8e44ad; }
-            .component.active { background: #2ecc71; border-color: #27ae60; box-shadow: 0 0 10px #2ecc71; }
+            .system-diagram { height: 280px; background: #1b2631; border-radius: 8px; position: relative; border: 1px solid #455a64; margin-top: 15px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 20px; }
+            .tank-row { display: flex; gap: 20px; align-items: flex-end; }
+            .component { width: 55px; height: 70px; background: #3498db; border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; text-align: center; color: white; border: 2px solid #2980b9; position: relative; transition: 0.3s; }
+            .component.tank-a { background: #e67e22; border-color: #d35400; }
+            .component.tank-b { background: #f1c40f; border-color: #f39c12; color: #2c3e50; }
+            .component.tank-acid { background: #e74c3c; border-color: #c0392b; }
+            .component.active { box-shadow: 0 0 15px #2ecc71; border-color: #2ecc71; transform: scale(1.05); }
+            
+            .valve { width: 12px; height: 12px; background: #95a5a6; border-radius: 2px; position: absolute; bottom: -15px; border: 1px solid #fff; }
+            .valve.active { background: #2ecc71; }
 
-            .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            .info-table td { padding: 8px; border-bottom: 1px solid #455a64; }
-            .info-table td:last-child { text-align: right; font-weight: bold; color: #f1c40f; }
+            .mixing-unit { display: flex; align-items: center; gap: 15px; padding: 10px; background: #2c3e50; border-radius: 8px; border: 1px dashed #7f8c8d; }
+            .pump { width: 35px; height: 35px; border-radius: 50%; background: #9b59b6; border: 2px solid #8e44ad; display: flex; align-items: center; justify-content: center; font-size: 8px; transition: 0.3s; }
+            .pump.active { background: #2ecc71; border-color: #27ae60; box-shadow: 0 0 10px #2ecc71; animation: spin 2s linear infinite; }
+            @keyframes spin { from {transform: rotate(0deg);} to {transform: rotate(360deg);} }
 
-            .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-            .input-group { margin-bottom: 10px; }
-            label { display: block; font-size: 11px; color: #bdc3c7; margin-bottom: 2px; }
-            input { width: 100%; padding: 6px; background: #2c3e50; border: 1px solid #455a64; color: white; border-radius: 4px; }
-            button { width: 100%; padding: 10px; background: #2ecc71; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-            button:hover { background: #27ae60; }
+            .manual-controls { margin-top: 15px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+            .ctrl-btn { font-size: 10px; padding: 6px; background: #34495e; border: 1px solid #5d6d7e; color: #fff; cursor: pointer; border-radius: 4px; text-align: center; }
+            .ctrl-btn.active { background: #2ecc71; color: #145a32; border-color: #27ae60; }
 
-            .status-bar { height: 30px; background: #1a252f; border-radius: 4px; margin-top: 10px; display: flex; align-items: center; justify-content: center; font-size: 12px; position: relative; overflow: hidden; }
-            .progress { position: absolute; left: 0; top: 0; bottom: 0; background: #2ecc71; opacity: 0.3; }
+            .settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 15px; }
+            .input-group label { display: block; font-size: 11px; margin-bottom: 4px; color: #bdc3c7; }
+            input { width: 100%; padding: 8px; background: #1c2833; border: 1px solid #5d6d7e; color: #fff; border-radius: 4px; box-sizing: border-box; }
+            button { width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 15px; }
+            button:hover { background: #2ecc71; transform: translateY(-2px); }
         </style>
     </head>
     <body>
         <div class="header">
-            <div style="font-size: 20px; font-weight: bold;">Berry_WHAT 양액 제어 시스템 <span style="font-size: 12px; font-weight: normal; color: #bdc3c7;">v1.46</span></div>
-            <div class="time-info">
-                <span>일출 <b><span id="sunrise">--:--</span></b></span>
-                <span>일몰 <b><span id="sunset">--:--</span></b></span>
-                <span id="current-time">---- -- -- --:--:--</span>
+            <div style="display:flex; align-items:center; gap:15px;">
+                <span style="font-size: 24px;">🌿</span>
+                <div>
+                    <div style="font-size: 20px; font-weight: bold;">Berry_WHAT 스마트 온실</div>
+                    <div style="font-size: 12px; color: #bdc3c7;">통합 환경 및 양액 제어 시스템 v2.0</div>
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div id="current-time" style="font-weight: bold; color: #f1c40f;">----.--.-- --:--:--</div>
+                <div style="font-size: 12px; color: #bdc3c7;">일출 <span id="sunrise">--:--</span> | 일몰 <span id="sunset">--:--</span></div>
             </div>
         </div>
 
-        <div class="main-grid">
-            <div>
-                <div class="gauge-container">
-                    <div class="gauge">
-                        <div class="gauge-title">EC</div>
-                        <div class="gauge-value" id="ec-val">--.--</div>
-                        <div class="gauge-targets">
-                            <span>목표값: <b id="target_ec_display">--</b></span>
-                            <span>제어값: <b id="control_ec_display">--</b></span>
-                        </div>
-                    </div>
-                    <div class="gauge">
-                        <div class="gauge-title">pH</div>
-                        <div class="gauge-value" id="ph-val">--.--</div>
-                        <div class="gauge-targets">
-                            <span>목표값: <b id="target_ph_display">--</b></span>
-                            <span>제어값: <b id="control_ph_display">--</b></span>
-                        </div>
+        <div class="main-container">
+            <!-- 1. 기후 제어 시스템 -->
+            <div class="system-row">
+                <div class="card">
+                    <div class="card-header">🌡️ 기후 모니터링 <span>Climate</span></div>
+                    <div class="data-grid">
+                        <div class="data-item"><div class="data-label">내부 온도</div><div class="data-value"><span id="temp">--.-</span><span class="data-unit">°C</span></div></div>
+                        <div class="data-item"><div class="data-label">상대 습도</div><div class="data-value"><span id="humidity">--.-</span><span class="data-unit">%</span></div></div>
+                        <div class="data-item"><div class="data-label">포차 (VPD)</div><div class="data-value"><span id="vpd">-.--</span><span class="data-unit">kPa</span></div></div>
+                        <div class="data-item"><div class="data-label">일사량</div><div class="data-value"><span id="solar_rad">---</span><span class="data-unit">W/m²</span></div></div>
                     </div>
                 </div>
-
-                <div class="status-bar">
-                    <div class="progress" style="width: 0%;"></div>
-                    <span id="supply-status">대기 중</span>
-                </div>
-
-                <div class="system-diagram">
-                    <div class="component">원수탱크</div>
-                    <div class="component pump" id="mixing-pump-viz">혼합<br>펌프</div>
-                    <div class="component">혼합탱크</div>
-                    <div class="component pump" id="supply-pump-viz">공급<br>펌프</div>
-                    <div class="component">교반기</div>
-                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
-                        <div style="width:10px; height:10px; background:#455a64; border-radius:2px;"></div>
-                        <div style="width:10px; height:10px; background:#455a64; border-radius:2px;"></div>
-                        <div style="width:10px; height:10px; background:#455a64; border-radius:2px;"></div>
-                        <div style="width:10px; height:10px; background:#2ecc71; border-radius:2px;"></div>
-                        <div style="width:10px; height:10px; background:#455a64; border-radius:2px;"></div>
+                <div class="card">
+                    <div class="card-header">⚙️ 기후 설정</div>
+                    <div class="settings-grid">
+                        <div class="input-group"><label>목표 온도 (°C)</label><input type="number" id="target_temp" step="0.5"></div>
+                        <div class="input-group"><label>온도 데드밴드</label><input type="number" id="temp_deadband" step="0.1"></div>
+                        <div class="input-group"><label>최저 VPD (kPa)</label><input type="number" id="target_vpd_min" step="0.1"></div>
+                        <div class="input-group"><label>최고 VPD (kPa)</label><input type="number" id="target_vpd_max" step="0.1"></div>
                     </div>
+                    <button onclick="saveSettings()">기후 설정 저장</button>
                 </div>
             </div>
 
-            <div>
-                <div class="card" style="margin-bottom: 10px;">
-                    <table class="info-table">
-                        <tr><td>제어방식</td><td id="control_mode">--</td></tr>
-                        <tr><td>제어코드</td><td id="control_code">--</td></tr>
-                        <tr><td>공급단위</td><td>리터</td></tr>
-                        <tr><td>현재 일사광</td><td id="solar_rad">-- W/m²</td></tr>
-                        <tr><td>현재 함수율</td><td id="water_content">-- %</td></tr>
-                        <tr><td>현재 유량</td><td id="flow_rate">-- L/min</td></tr>
-                        <tr><td>오늘 공급</td><td id="today_supply">--</td></tr>
-                    </table>
-                </div>
-
+            <!-- 2. 양액 제어 시스템 -->
+            <div class="system-row">
                 <div class="card">
-                    <div style="font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #455a64; padding-bottom: 5px;">시스템 설정</div>
+                    <div class="card-header">
+                        💧 양액 및 관수 <span>Nutrient</span>
+                        <div class="mode-toggle" id="nutrient-mode" onclick="toggleNutrientMode()">AUTO</div>
+                    </div>
+                    <div class="data-grid">
+                        <div class="data-item"><div class="data-label">현재 EC</div><div class="data-value" id="ec-val">-.--</div></div>
+                        <div class="data-item"><div class="data-label">현재 pH</div><div class="data-value" id="ph-val">-.--</div></div>
+                        <div class="data-item"><div class="data-label">토양 수분</div><div class="data-value"><span id="moisture">--.-</span><span class="data-unit">%</span></div></div>
+                        <div class="data-item"><div class="data-label">일사 적산</div><div class="data-value"><span id="solar_acc">---</span><span class="data-unit">J/cm²</span></div></div>
+                    </div>
+                    
+                    <div class="system-diagram">
+                        <div class="tank-row">
+                            <div class="component tank-a" id="viz-valve-A">A탱크<div class="valve" id="viz-v-A"></div></div>
+                            <div class="component tank-b" id="viz-valve-B">B탱크<div class="valve" id="viz-v-B"></div></div>
+                            <div class="component tank-acid" id="viz-valve-ACID">산탱크<div class="valve" id="viz-v-ACID"></div></div>
+                            <div class="component">원수<div class="valve active"></div></div>
+                        </div>
+                        <div class="mixing-unit">
+                            <div class="pump" id="viz-mixing-pump">MIX</div>
+                            <div class="component" style="height:40px; width:80px;">혼합탱크</div>
+                            <div class="pump" id="viz-supply-pump">SUP</div>
+                        </div>
+                    </div>
+
+                    <div class="manual-controls" id="manual-buttons" style="display:none;">
+                        <div class="ctrl-btn" onclick="toggleActuator('valves', 'A')">A 밸브</div>
+                        <div class="ctrl-btn" onclick="toggleActuator('valves', 'B')">B 밸브</div>
+                        <div class="ctrl-btn" onclick="toggleActuator('valves', 'ACID')">산 밸브</div>
+                        <div class="ctrl-btn" onclick="toggleActuator('pumps', 'MIXING')">혼합 펌프</div>
+                        <div class="ctrl-btn" onclick="toggleActuator('pumps', 'SUPPLY')">공급 펌프</div>
+                        <div class="ctrl-btn" onclick="toggleActuator('valves', 'MAIN')">메인 밸브</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">⚙️ 양액 설정</div>
                     <div class="settings-grid">
                         <div class="input-group"><label>목표 EC</label><input type="number" id="target_ec" step="0.1"></div>
                         <div class="input-group"><label>목표 pH</label><input type="number" id="target_ph" step="0.1"></div>
                         <div class="input-group"><label>일사 임계치</label><input type="number" id="solar_threshold"></div>
-                        <div class="input-group"><label>최저 수분</label><input type="number" id="min_moisture"></div>
-                        <div class="input-group"><label>관수 시간(초)</label><input type="number" id="duration"></div>
-                        <div class="input-group"><label>관수 간격(분)</label><input type="number" id="interval"></div>
+                        <div class="input-group"><label>최저 수분 (%)</label><input type="number" id="min_moisture"></div>
                     </div>
-                    <button onclick="saveSettings()">설정 적용</button>
+                    <button onclick="saveSettings()" style="background:#2980b9;">양액 설정 저장</button>
+                    <div style="margin-top: 15px; font-size: 12px; color: #bdc3c7; text-align: center;">오늘 공급 횟수: <b id="today_supply" style="color:#f1c40f;">--</b></div>
                 </div>
             </div>
         </div>
 
         <script>
+            let currentSettings = {};
+
+            function toggleNutrientMode() {
+                const isManual = currentSettings.manual_mode;
+                saveSettings({ manual_mode: !isManual });
+            }
+
+            function toggleActuator(type, key) {
+                if (!currentSettings.manual_mode) return;
+                const path = type === 'valves' ? 'manual_valves' : 'manual_pumps';
+                const newState = !currentSettings[path][key];
+                const update = {};
+                update[path] = { ...currentSettings[path] };
+                update[path][key] = newState;
+                saveSettings(update);
+            }
+
             function updateUI() {
                 const now = new Date();
                 document.getElementById('current-time').innerText = now.toLocaleString();
 
                 fetch('/api/data').then(r => r.json()).then(data => {
-                    if(data.ec) {
+                    if(data.temp) {
+                        document.getElementById('temp').innerText = data.temp;
+                        document.getElementById('humidity').innerText = data.humidity;
+                        document.getElementById('vpd').innerText = data.vpd;
+                        document.getElementById('solar_rad').innerText = data.solar_radiation;
                         document.getElementById('ec-val').innerText = data.ec;
-                        document.getElementById('control_ec_display').innerText = data.ec;
                         document.getElementById('ph-val').innerText = data.ph;
-                        document.getElementById('control_ph_display').innerText = data.ph;
-                        document.getElementById('solar_rad').innerText = data.solar_radiation + ' W/m²';
-                        document.getElementById('water_content').innerText = data.water_content + ' %';
-                        document.getElementById('flow_rate').innerText = data.flow_rate + ' L/min';
+                        document.getElementById('moisture').innerText = data.moisture;
+                        document.getElementById('solar_acc').innerText = data.solar_accumulation;
                     }
                 });
 
                 fetch('/api/status').then(r => r.json()).then(status => {
-                    document.getElementById('sunrise').innerText = status.actuators.sunrise;
-                    document.getElementById('sunset').innerText = status.actuators.sunset;
-                    document.getElementById('today_supply').innerText = status.actuators.today_supply;
+                    const acts = status.actuators;
+                    document.getElementById('sunrise').innerText = acts.sunrise;
+                    document.getElementById('sunset').innerText = acts.sunset;
+                    document.getElementById('today_supply').innerText = acts.today_supply;
                     
-                    const isIrrigating = status.actuators.irrigation.includes('On');
-                    document.getElementById('supply-status').innerText = isIrrigating ? '공급 중...' : '대기 중';
-                    document.querySelector('.progress').style.width = isIrrigating ? '100%' : '0%';
+                    const updateState = (id, isActive) => {
+                        const el = document.getElementById(id);
+                        if(el) isActive ? el.classList.add('active') : el.classList.remove('active');
+                    };
+
+                    updateState('viz-valve-A', acts.valves.A); updateState('viz-v-A', acts.valves.A);
+                    updateState('viz-valve-B', acts.valves.B); updateState('viz-v-B', acts.valves.B);
+                    updateState('viz-valve-ACID', acts.valves.ACID); updateState('viz-v-ACID', acts.valves.ACID);
+                    updateState('viz-mixing-pump', acts.mixing_pump === 'On');
+                    updateState('viz-supply-pump', acts.supply_pump === 'On');
                     
-                    document.getElementById('mixing-pump-viz').className = 'component pump' + (status.actuators.mixing_pump === 'On' ? ' active' : '');
-                    document.getElementById('supply-pump-viz').className = 'component pump' + (status.actuators.supply_pump === 'On' ? ' active' : '');
+                    if (currentSettings.manual_mode) {
+                        const btns = document.querySelectorAll('.ctrl-btn');
+                        btns.forEach(b => {
+                            if(b.innerText.includes('A 밸브')) acts.valves.A ? b.classList.add('active') : b.classList.remove('active');
+                            if(b.innerText.includes('B 밸브')) acts.valves.B ? b.classList.add('active') : b.classList.remove('active');
+                            if(b.innerText.includes('산 밸브')) acts.valves.ACID ? b.classList.add('active') : b.classList.remove('active');
+                            if(b.innerText.includes('혼합 펌프')) acts.mixing_pump === 'On' ? b.classList.add('active') : b.classList.remove('active');
+                            if(b.innerText.includes('공급 펌프')) acts.supply_pump === 'On' ? b.classList.add('active') : b.classList.remove('active');
+                            if(b.innerText.includes('메인 밸브')) acts.valves.MAIN ? b.classList.add('active') : b.classList.remove('active');
+                        });
+                    }
                 });
 
-                fetch('/api/settings').then(r => r.json()).then(settings => {
-                    document.getElementById('target_ec_display').innerText = settings.target_ec;
-                    document.getElementById('target_ph_display').innerText = settings.target_ph;
-                    document.getElementById('control_mode').innerText = settings.control_mode;
-                    document.getElementById('control_code').innerText = settings.control_code;
-                    
-                    // Only update inputs if they are not being edited (simple check)
+                fetch('/api/settings').then(r => r.json()).then(s => {
+                    currentSettings = s;
+                    const modeEl = document.getElementById('nutrient-mode');
+                    modeEl.innerText = s.manual_mode ? 'MANUAL' : 'AUTO';
+                    s.manual_mode ? modeEl.classList.add('active') : modeEl.classList.remove('active');
+                    document.getElementById('manual-buttons').style.display = s.manual_mode ? 'grid' : 'none';
+
                     if (document.activeElement.tagName !== 'INPUT') {
-                        document.getElementById('target_ec').value = settings.target_ec;
-                        document.getElementById('target_ph').value = settings.target_ph;
-                        document.getElementById('solar_threshold').value = settings.solar_threshold;
-                        document.getElementById('min_moisture').value = settings.min_moisture;
-                        document.getElementById('duration').value = settings.duration;
-                        document.getElementById('interval').value = settings.interval;
+                        ['target_temp', 'temp_deadband', 'target_vpd_min', 'target_vpd_max',
+                         'target_ec', 'target_ph', 'solar_threshold', 'min_moisture'].forEach(id => {
+                             const el = document.getElementById(id);
+                             if(el) el.value = s[id];
+                         });
                     }
                 });
             }
 
-            function saveSettings() {
-                const settings = {
-                    target_ec: parseFloat(document.getElementById('target_ec').value),
-                    target_ph: parseFloat(document.getElementById('target_ph').value),
-                    solar_threshold: parseFloat(document.getElementById('solar_threshold').value),
-                    min_moisture: parseFloat(document.getElementById('min_moisture').value),
-                    duration: parseInt(document.getElementById('duration').value),
-                    interval: parseInt(document.getElementById('interval').value)
-                };
+            function saveSettings(customUpdate = null) {
+                let settings = customUpdate;
+                if (!settings) {
+                    settings = {};
+                    document.querySelectorAll('.settings-grid input').forEach(input => {
+                        settings[input.id] = parseFloat(input.value);
+                    });
+                }
                 fetch('/api/settings', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(settings)
-                }).then(() => alert('설정이 시스템에 반영되었습니다.'));
+                }).then(() => updateUI());
             }
 
             setInterval(updateUI, 2000);
