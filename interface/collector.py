@@ -12,6 +12,10 @@ class SimulatedCollector(BaseCollector):
         self.temp = 24.5
         self.humidity = 65.0
         self.moisture = 45.0
+        self.ec = 1.46
+        self.ph = 5.44
+        self.flow_rate = 161.0
+        self.water_content = 62.0
         self.solar_radiation = 400.0
         self.solar_accumulation = 0.0
         self.last_time = time.time()
@@ -20,11 +24,32 @@ class SimulatedCollector(BaseCollector):
         now = time.time()
         duration = now - self.last_time
         self.last_time = now
+        
+        # 1. 일사 적산
         self.solar_accumulation += (self.solar_radiation * duration) / 10000.0
         
+        # 2. 액추에이터 상태에 따른 변화 (가정된 외부 상태를 가져올 수 없으므로 내부 상태 추적 필요)
+        # 여기서는 단순화를 위해 random 기반에 약간의 경향성 추가
+        import random
+        
+        # 관수 중일 때 수분 증가, EC/pH 변화
+        # (실제로는 engine의 actuator_status를 참조해야 하지만 구조상 독립적임)
+        # 간단한 랜덤 드리프트
+        self.temp += random.uniform(-0.05, 0.05)
+        self.moisture -= 0.01 * duration # 자연 건조
+        self.ec += random.uniform(-0.005, 0.005)
+        self.ph += random.uniform(-0.01, 0.01)
+        
         return {
-            "temp": self.temp, "humidity": self.humidity, "moisture": self.moisture,
-            "solar_radiation": self.solar_radiation, "solar_accumulation": round(self.solar_accumulation, 2),
+            "temp": round(self.temp, 1), 
+            "humidity": round(self.humidity, 1), 
+            "moisture": round(max(0, self.moisture), 1),
+            "ec": round(self.ec, 2),
+            "ph": round(self.ph, 2),
+            "flow_rate": round(self.flow_rate, 1),
+            "water_content": round(self.water_content, 1),
+            "solar_radiation": round(self.solar_radiation, 1), 
+            "solar_accumulation": round(self.solar_accumulation, 2),
             "vpd": self.calculate_vpd(self.temp, self.humidity)
         }
 

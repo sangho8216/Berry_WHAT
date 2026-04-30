@@ -30,7 +30,9 @@ def run_cli_mode():
 if __name__ == "__main__":
     # 웹 모드 실행: python3 main.py --web
     if len(sys.argv) > 1 and sys.argv[1] == "--web":
-        print("Starting Berry_WHAT Web Dashboard at http://localhost:5000")
-        flask_app.run(host='0.0.0.0', port=5000)
+        from web.app import start_backend
+        start_backend()
+        print("Starting Berry_WHAT Web Dashboard at http://localhost:8080")
+        flask_app.run(host='0.0.0.0', port=8080)
     else:
         run_cli_mode()
