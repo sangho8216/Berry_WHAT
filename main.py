@@ -17,13 +17,16 @@ def run_cli_mode():
     engine = SystemControl()
     
     try:
+        actuator_status = None
         while True:
-            data = collector.collect_signals()
+            data = collector.collect_signals(actuator_status=actuator_status)
             if "error" in data:
                 print(f"[Error] {data['error']}")
             else:
                 engine.process(data, collector=collector)
+                actuator_status = engine.get_actuator_status()
             time.sleep(2)
+
     except KeyboardInterrupt:
         print("\nShutting down.")
 

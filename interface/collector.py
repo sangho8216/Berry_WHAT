@@ -12,15 +12,15 @@ class SimulatedCollector(BaseCollector):
         self.temp = 24.5
         self.humidity = 65.0
         self.moisture = 45.0
-        self.ec = 1.46
-        self.ph = 5.44
-        self.flow_rate = 161.0
+        self.ec = 0.8  # Start with lower EC
+        self.ph = 7.0  # Start with neutral pH
+        self.flow_rate = 0.0
         self.water_content = 62.0
         self.solar_radiation = 400.0
         self.solar_accumulation = 0.0
         self.last_time = time.time()
 
-    def collect_signals(self):
+    def collect_signals(self, actuator_status=None):
         now = time.time()
         duration = now - self.last_time
         self.last_time = now
@@ -28,30 +28,56 @@ class SimulatedCollector(BaseCollector):
         # 1. 일사 적산
         self.solar_accumulation += (self.solar_radiation * duration) / 10000.0
         
-        # 2. 액추에이터 상태에 따른 변화 (가정된 외부 상태를 가져올 수 없으므로 내부 상태 추적 필요)
-        # 여기서는 단순화를 위해 random 기반에 약간의 경향성 추가
+        # 2. 액추에이터 상태에 따른 물리 시뮬레이션
         import random
         
-        # 관수 중일 때 수분 증가, EC/pH 변화
-        # (실제로는 engine의 actuator_status를 참조해야 하지만 구조상 독립적임)
-        # 간단한 랜덤 드리프트
-        self.temp += random.uniform(-0.05, 0.05)
-        self.moisture -= 0.01 * duration # 자연 건조
-        self.ec += random.uniform(-0.005, 0.005)
-        self.ph += random.uniform(-0.01, 0.01)
+        if actuator_status:
+            # 펌프 상태 확인
+            mixing_on = actuator_status.get("mixing_pump") == "On"
+            supply_on = actuator_status.get("supply_pump") == "On"
+            valves = actuator_status.get("valves", {})
+            
+            # 믹싱 효과 (EC/pH 변화)
+            if mixing_on:
+                if valves.get("A") or valves.get("B"):
+                    self.ec += 0.02 * duration  # A/B 밸브 열림 -> EC 상승
+                if valves.get("ACID"):
+                    self.ph -= 0.05 * duration  # Acid 밸브 열림 -> pH 하락
+                
+                # 자연적인 안정화 (믹싱 펌프가 돌면 균일해짐)
+                self.ec += random.uniform(-0.001, 0.001)
+                self.ph += random.uniform(-0.002, 0.002)
+            
+            # 관수 효과 (수분량 변화)
+            if supply_on:
+                self.moisture += 0.5 * duration
+                self.flow_rate = 150.0 + random.uniform(-5, 5)
+            else:
+                self.flow_rate = 0.0
         
+        # 자연 건조 및 온도 변화
+        self.temp += random.uniform(-0.05, 0.05)
+        self.moisture -= 0.02 * duration 
+        self.moisture = max(0, min(100, self.moisture))
+        
+        # EC/pH 자연 드리프트 (믹싱 안 할 때)
+        if not (actuator_status and actuator_status.get("mixing_pump") == "On"):
+            self.ec += random.uniform(-0.002, 0.002)
+            self.ph += random.uniform(-0.002, 0.002)
+
         return {
             "temp": round(self.temp, 1), 
             "humidity": round(self.humidity, 1), 
-            "moisture": round(max(0, self.moisture), 1),
-            "ec": round(self.ec, 2),
-            "ph": round(self.ph, 2),
+            "moisture": round(self.moisture, 1),
+            "ec": round(max(0.1, self.ec), 2),
+            "ph": round(max(1.0, min(14.0, self.ph)), 2),
             "flow_rate": round(self.flow_rate, 1),
             "water_content": round(self.water_content, 1),
             "solar_radiation": round(self.solar_radiation, 1), 
             "solar_accumulation": round(self.solar_accumulation, 2),
             "vpd": self.calculate_vpd(self.temp, self.humidity)
         }
+
 
     def reset_solar_accumulation(self):
         self.solar_accumulation = 0.0

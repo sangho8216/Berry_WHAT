@@ -1,11 +1,13 @@
 from datetime import datetime
 from control.air import AirController
 from control.soil import SoilController
+from core.nutrient_engine import NutrientEngine, NutrientState
 
 class SystemControl:
     def __init__(self):
         self.air = AirController()
         self.soil = SoilController()
+        self.nutrient_engine = NutrientEngine(self.soil)
         
         # 1. 기후 제어 설정 (Climate Control)
         self.climate_settings = {
@@ -15,11 +17,11 @@ class SystemControl:
             "target_vpd_max": 1.2
         }
         
-        # 2. 양액/관수 제어 설정 (Nutrient Control - TCK22 Style)
+        # 2. 양액/관수 제어 설정 (Nutrient Control - v3.0 Standard)
         self.nutrient_settings = {
-            "start_time": "08:00",
-            "end_time": "18:00",
-            "target_ec": 1.2,
+            "start_time": "06:00",
+            "end_time": "20:00",
+            "target_ec": 1.5,
             "target_ph": 5.8,
             "solar_threshold": 150.0,
             "min_moisture": 30.0,
@@ -43,7 +45,8 @@ class SystemControl:
             "vents": "Closed", "fans": "Off", "heater": "Off", "misters": "Off",
             # 양액 계통
             "irrigation": "Off", "mixing_pump": "Off", "supply_pump": "Off",
-            "valves": {"A": False, "B": False, "C": False, "ACID": False}
+            "valves": {"A": False, "B": False, "C": False, "ACID": False},
+            "nutrient_state": "STANDBY"
         }
 
     def _process_climate(self, data):
@@ -75,6 +78,13 @@ class SystemControl:
             self.actuator_status["misters"] = "Off"
 
     def _process_nutrient(self, data, collector):
+        # 엔진 레시피 업데이트
+        self.nutrient_engine.set_recipe(
+            self.nutrient_settings["target_ec"],
+            self.nutrient_settings["target_ph"],
+            self.nutrient_settings["duration"]
+        )
+
         if self.nutrient_settings.get("manual_mode"):
             # 수동 모드: 설정된 개별 밸브/펌프 상태 반영
             mv = self.nutrient_settings["manual_valves"]
@@ -87,49 +97,56 @@ class SystemControl:
             self.actuator_status["mixing_pump"] = "On" if mp["MIXING"] else "Off"
             self.actuator_status["supply_pump"] = "On" if mp["SUPPLY"] else "Off"
             self.actuator_status["valves"].update(mv)
+            self.actuator_status["nutrient_state"] = "MANUAL"
             return
 
+        # 자동 제어 트리거 로직
         moisture = data.get("moisture")
         solar_acc = data.get("solar_accumulation")
-        current_ec = data.get("ec")
-        current_ph = data.get("ph")
         now = datetime.now()
 
-        # 시간 윈도우 및 주기 확인
-        can_irrigate = self.is_within_time_window()
-        if self.last_irrigation_time:
-            elapsed = (now - self.last_irrigation_time).total_seconds() / 60
-            if elapsed < self.nutrient_settings["interval"]:
-                can_irrigate = False
+        if self.nutrient_engine.state == NutrientState.STANDBY:
+            can_irrigate = self.is_within_time_window()
+            if self.last_irrigation_time:
+                elapsed = (now - self.last_irrigation_time).total_seconds() / 60
+                if elapsed < self.nutrient_settings["interval"]:
+                    can_irrigate = False
 
-        triggered = False
-        if can_irrigate:
-            if solar_acc >= self.nutrient_settings["solar_threshold"]:
-                print(f"[Nutrient] 일사 적산 도달 관수 실행")
-                triggered = True
-                if collector: collector.reset_solar_accumulation()
-            elif moisture < self.nutrient_settings["min_moisture"]:
-                print(f"[Nutrient] 최저 수분 도달 관수 실행")
-                triggered = True
+            if can_irrigate:
+                if solar_acc >= self.nutrient_settings["solar_threshold"]:
+                    print(f"[Nutrient] 일사 적산 도달 관수 실행")
+                    self.nutrient_engine.trigger_irrigation()
+                    if collector: collector.reset_solar_accumulation()
+                    self.last_irrigation_time = now
+                    self.today_supply_count += 1
+                elif moisture < self.nutrient_settings["min_moisture"]:
+                    print(f"[Nutrient] 최저 수분 도달 관수 실행")
+                    self.nutrient_engine.trigger_irrigation()
+                    self.last_irrigation_time = now
+                    self.today_supply_count += 1
 
-        if triggered:
-            # EC/pH 보정
-            if current_ec < self.nutrient_settings["target_ec"] - 0.05:
-                self.soil.set_valve('A', True); self.soil.set_valve('B', True)
-                self.actuator_status["valves"]["A"] = True; self.actuator_status["valves"]["B"] = True
-            if current_ph > self.nutrient_settings["target_ph"] + 0.1:
-                self.soil.set_valve('ACID', True)
-                self.actuator_status["valves"]["ACID"] = True
-            
-            self.soil.set_pump('MIXING', True)
-            self.soil.irrigate(self.nutrient_settings["duration"])
-            self.last_irrigation_time = now
-            self.today_supply_count += 1
-            self.actuator_status["irrigation"] = "On"
+        # 엔진 스텝 실행
+        self.nutrient_engine.step(data)
+
+        # 상태 업데이트 (엔진 상태 및 액추에이터 상태 동기화)
+        self.actuator_status["nutrient_state"] = self.nutrient_engine.get_state_name()
+        self.actuator_status["irrigation"] = "On" if self.nutrient_engine.state != NutrientState.STANDBY else "Off"
+        
+        # 개별 액추에이터 상태는 엔진에서 직접 제어하지만 UI 표시를 위해 업데이트
+        # (실제 하드웨어 상태를 읽어오는 것이 좋으나 여기선 엔진의 의도 반영)
+        self.actuator_status["mixing_pump"] = "On" if self.nutrient_engine.state in [NutrientState.PRE_RINSE, NutrientState.MIXING, NutrientState.STABILIZATION, NutrientState.IRRIGATION] else "Off"
+        self.actuator_status["supply_pump"] = "On" if self.nutrient_engine.state in [NutrientState.PRE_RINSE, NutrientState.IRRIGATION, NutrientState.POST_RINSE] else "Off"
+        
+        # 밸브 상태 (MIXING 단계에서만 A/B/ACID 활성화 가능)
+        if self.nutrient_engine.state == NutrientState.MIXING:
+            current_ec = data.get("ec", 0.0)
+            current_ph = data.get("ph", 7.0)
+            self.actuator_status["valves"]["A"] = current_ec < self.nutrient_settings["target_ec"] - 0.05
+            self.actuator_status["valves"]["B"] = self.actuator_status["valves"]["A"]
+            self.actuator_status["valves"]["ACID"] = current_ph > self.nutrient_settings["target_ph"] + 0.05
         else:
-            self.actuator_status["irrigation"] = "Off"
-            self.actuator_status.update({"mixing_pump": "Off", "supply_pump": "Off"})
-            for v in self.actuator_status["valves"]: self.actuator_status["valves"][v] = False
+            for v in ["A", "B", "ACID"]: self.actuator_status["valves"][v] = False
+
 
     def process(self, data, collector=None):
         self._process_climate(data)

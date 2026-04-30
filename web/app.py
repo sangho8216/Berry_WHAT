@@ -20,14 +20,17 @@ class SystemState:
 state = SystemState()
 
 def control_loop():
+    actuator_status = None
     while state.running:
-        data = state.collector.collect_signals()
+        data = state.collector.collect_signals(actuator_status=actuator_status)
         if "error" not in data:
             data["status"] = "Connected"
             state.current_data = data
             state.control.process(data, collector=state.collector)
             state.db.save_data(data)
+            actuator_status = state.control.get_actuator_status()
         time.sleep(2)
+
 
 @app.route('/')
 def index():
@@ -36,7 +39,7 @@ def index():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Berry_WHAT Precision Control</title>
+        <title>Berry_WHAT Precision Control v3.0</title>
         <style>
             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #1c2833; color: #ecf0f1; font-size: 14px; }
             .header { background: #2c3e50; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #27ae60; }
@@ -49,10 +52,15 @@ def index():
             .card-header .mode-toggle.active { background: #2ecc71; color: #145a32; }
             
             .data-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-            .data-item { background: #1b2631; padding: 15px; border-radius: 6px; text-align: center; }
+            .data-item { background: #1b2631; padding: 15px; border-radius: 6px; text-align: center; position: relative; }
             .data-label { font-size: 12px; color: #bdc3c7; margin-bottom: 5px; }
             .data-value { font-size: 24px; font-weight: bold; color: #fff; }
             .data-unit { font-size: 14px; color: #2ecc71; margin-left: 4px; }
+
+            .step-indicator { flex: 1; text-align: center; padding: 10px; background: #34495e; border-radius: 4px; font-size: 12px; color: #7f8c8d; border-bottom: 4px solid transparent; transition: 0.3s; }
+            .step-indicator.active { background: #2ecc71; color: #145a32; font-weight: bold; border-bottom-color: #27ae60; }
+            .convergence-bar { height: 4px; background: #1b2631; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+            .convergence-fill { height: 100%; background: #2ecc71; width: 0%; transition: 0.5s; }
 
             .system-diagram { height: 280px; background: #1b2631; border-radius: 8px; position: relative; border: 1px solid #455a64; margin-top: 15px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 20px; }
             .tank-row { display: flex; gap: 20px; align-items: flex-end; }
@@ -84,10 +92,10 @@ def index():
     <body>
         <div class="header">
             <div style="display:flex; align-items:center; gap:15px;">
-                <span style="font-size: 24px;">🌿</span>
+                <span style="font-size: 24px;">🍓</span>
                 <div>
                     <div style="font-size: 20px; font-weight: bold;">Berry_WHAT 스마트 온실</div>
-                    <div style="font-size: 12px; color: #bdc3c7;">통합 환경 및 양액 제어 시스템 v2.0</div>
+                    <div style="font-size: 12px; color: #bdc3c7;">통합 환경 및 양액 제어 시스템 v3.0 (Industrial Std.)</div>
                 </div>
             </div>
             <div style="text-align: right;">
@@ -97,6 +105,20 @@ def index():
         </div>
 
         <div class="main-container">
+            <!-- 0. 공정 플로우 (Process Flow) -->
+            <div class="card" style="margin-bottom: 0;">
+                <div class="card-header">🔄 공정 상태 (Process Flow) <span id="current-state-text" style="color: #f1c40f;">STANDBY</span></div>
+                <div style="display: flex; justify-content: space-between; padding: 10px 0; overflow-x: auto; gap: 10px;">
+                    <div class="step-indicator" id="step-STANDBY">대기</div>
+                    <div class="step-indicator" id="step-PRE_RINSE">전세척</div>
+                    <div class="step-indicator" id="step-MIXING">배합</div>
+                    <div class="step-indicator" id="step-STABILIZATION">안정화</div>
+                    <div class="step-indicator" id="step-IRRIGATION">관수</div>
+                    <div class="step-indicator" id="step-POST_RINSE">후세척</div>
+                    <div class="step-indicator" id="step-ALARM" style="background: #c0392b; display:none;">경보</div>
+                </div>
+            </div>
+
             <!-- 1. 기후 제어 시스템 -->
             <div class="system-row">
                 <div class="card">
@@ -128,8 +150,16 @@ def index():
                         <div class="mode-toggle" id="nutrient-mode" onclick="toggleNutrientMode()">AUTO</div>
                     </div>
                     <div class="data-grid">
-                        <div class="data-item"><div class="data-label">현재 EC</div><div class="data-value" id="ec-val">-.--</div></div>
-                        <div class="data-item"><div class="data-label">현재 pH</div><div class="data-value" id="ph-val">-.--</div></div>
+                        <div class="data-item">
+                            <div class="data-label">현재 EC</div>
+                            <div class="data-value" id="ec-val">-.--</div>
+                            <div class="convergence-bar"><div class="convergence-fill" id="ec-conv"></div></div>
+                        </div>
+                        <div class="data-item">
+                            <div class="data-label">현재 pH</div>
+                            <div class="data-value" id="ph-val">-.--</div>
+                            <div class="convergence-bar"><div class="convergence-fill" id="ph-conv"></div></div>
+                        </div>
                         <div class="data-item"><div class="data-label">토양 수분</div><div class="data-value"><span id="moisture">--.-</span><span class="data-unit">%</span></div></div>
                         <div class="data-item"><div class="data-label">일사 적산</div><div class="data-value"><span id="solar_acc">---</span><span class="data-unit">J/cm²</span></div></div>
                     </div>
@@ -222,6 +252,36 @@ def index():
                     updateState('viz-valve-ACID', acts.valves.ACID); updateState('viz-v-ACID', acts.valves.ACID);
                     updateState('viz-mixing-pump', acts.mixing_pump === 'On');
                     updateState('viz-supply-pump', acts.supply_pump === 'On');
+                    
+                    // 공정 상태 업데이트
+                    document.getElementById('current-state-text').innerText = acts.nutrient_state;
+                    const steps = ['STANDBY', 'PRE_RINSE', 'MIXING', 'STABILIZATION', 'IRRIGATION', 'POST_RINSE', 'ALARM'];
+                    steps.forEach(s => {
+                        const el = document.getElementById('step-' + s);
+                        if(el) {
+                            if(s === acts.nutrient_state) {
+                                el.classList.add('active');
+                                if(s === 'ALARM') el.style.display = 'block';
+                            } else {
+                                el.classList.remove('active');
+                                if(s === 'ALARM') el.style.display = 'none';
+                            }
+                        }
+                    });
+
+                    // 수렴도 계산 (EC/pH)
+                    if (currentSettings.target_ec > 0) {
+                        const ecVal = parseFloat(document.getElementById('ec-val').innerText);
+                        const ecDiff = Math.abs(ecVal - currentSettings.target_ec);
+                        const ecConv = Math.max(0, 100 - (ecDiff / 0.5) * 100);
+                        document.getElementById('ec-conv').style.width = ecConv + '%';
+                    }
+                    if (currentSettings.target_ph > 0) {
+                        const phVal = parseFloat(document.getElementById('ph-val').innerText);
+                        const phDiff = Math.abs(phVal - currentSettings.target_ph);
+                        const phConv = Math.max(0, 100 - (phDiff / 1.0) * 100);
+                        document.getElementById('ph-conv').style.width = phConv + '%';
+                    }
                     
                     if (currentSettings.manual_mode) {
                         const btns = document.querySelectorAll('.ctrl-btn');
