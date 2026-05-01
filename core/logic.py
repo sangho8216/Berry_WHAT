@@ -8,11 +8,10 @@ class SystemControl:
         self.air = AirController()
         self.soil = SoilController()
         
-        # 스킬 기반 대기 환경 설정
         self.target_temp = 22.0
         self.temp_deadband = 2.0
-        self.target_vpd_min = 0.8  # kPa (스킬 권장 최소값)
-        self.target_vpd_max = 1.2  # kPa (스킬 권장 최대값)
+        self.target_vpd_min = 0.8
+        self.target_vpd_max = 1.2
         
         self.refresh_groups()
         self.actuator_status = {
@@ -24,6 +23,7 @@ class SystemControl:
         db_groups = self.db.get_groups()
         self.irrigation_groups = []
         for g in db_groups:
+            # 상태값 초기화
             g["status"] = "Ready"
             g["last_irrigation_time"] = None
             self.irrigation_groups.append(g)
@@ -44,31 +44,15 @@ class SystemControl:
         curr_ph = data.get("ph", 7)
         now = datetime.now()
 
-        # 1. 스킬 기반 대기 & VPD 제어
-        # 온도 제어 (Deadband)
+        # 1. 대기 제어 (이전과 동일)
         if temp > self.target_temp + self.temp_deadband:
             self.air.adjust_environment("OPEN_VENTS")
-            self.actuator_status["vents"] = "Open (Cooling)"
+            self.actuator_status["vents"] = "Open"
         elif temp < self.target_temp - self.temp_deadband:
             self.air.adjust_environment("CLOSE_VENTS")
             self.actuator_status["vents"] = "Closed"
-            self.actuator_status["heater"] = "On"
-        else:
-            self.actuator_status["heater"] = "Off"
 
-        # VPD 제어 (습도 최적화)
-        if vpd < self.target_vpd_min:
-            # 너무 습함 -> 환기 증대 (Purge & Reheat)
-            self.air.adjust_environment("INCREASE_VENTILATION")
-            self.actuator_status["vents"] = "Purge (Dehumid)"
-        elif vpd > self.target_vpd_max:
-            # 너무 건조함 -> 미스트 가동
-            self.air.adjust_environment("START_MISTERS")
-            self.actuator_status["misters"] = "On"
-        else:
-            self.actuator_status["misters"] = "Off"
-
-        # 2. 스킬 기반 관수 제어 (Multi-Group)
+        # 2. 고도화된 멀티 구역 관수 로직
         any_watering = False
         for group in self.irrigation_groups:
             if not group["enabled"]:
@@ -78,59 +62,63 @@ class SystemControl:
             can_irrigate = self.is_within_time(group)
             
             # 휴지기 체크
+            elapsed_min = 0
             if group["last_irrigation_time"]:
-                elapsed = (now - group["last_irrigation_time"]).total_seconds() / 60
-                if elapsed < group["interval"]:
+                elapsed_min = (now - group["last_irrigation_time"]).total_seconds() / 60
+                if elapsed_min < group["interval"]:
                     can_irrigate = False
-                    group["status"] = f"Wait({int(group['interval']-elapsed)}m)"
+                    group["status"] = f"Wait({int(group['interval']-elapsed_min)}m)"
             
             if group["status"] == "Watering":
                 any_watering = True
                 self._handle_fertigation(group, curr_ec, curr_ph)
-                if (now - group["last_irrigation_time"]).total_seconds() >= group["duration"]:
+                
+                # 관수 시간 + 후수 시간 체크
+                total_duration = group["duration"] + group["rinse_duration"]
+                if (now - group["last_irrigation_time"]).total_seconds() >= total_duration:
                     group["status"] = "Ready"
                     self.soil.stop_irrigation(line_id=group["id"])
             
             elif can_irrigate:
                 triggered = False
-                # 일사 기반 (가중치: 일사 강도가 있을 때만 적산 유효성 판단 가능)
-                if solar_acc >= group["solar_threshold"] and solar_rad > 50:
+                trigger_reason = ""
+
+                # 조건 1: 일사 적산 기반 (최소 일사 강도 조건 포함)
+                if solar_acc >= group["solar_threshold"] and solar_rad >= group["min_radiation"]:
                     triggered = True
+                    trigger_reason = "Solar Sum"
                     if collector: collector.reset_solar_accumulation()
-                # 수분 기반 (안전 보장)
+                
+                # 조건 2: 최대 휴지 시간 초과 (백업 타이머)
+                elif group["last_irrigation_time"] and elapsed_min >= group["fixed_interval"]:
+                    triggered = True
+                    trigger_reason = "Fixed Interval"
+                
+                # 조건 3: 최저 토양 수분 (비상)
                 elif moisture < group["min_moisture"]:
                     triggered = True
+                    trigger_reason = "Low Moisture"
 
                 if triggered:
+                    print(f"[Logic] {group['name']} 관수 시작: {trigger_reason}")
                     group["status"] = "Watering"
                     group["last_irrigation_time"] = now
                     self.soil.irrigate(group["duration"], line_id=group["id"])
                     any_watering = True
                 else:
-                    group["status"] = "Ready"
+                    group["status"] = "Monitoring"
 
         if not any_watering:
             self.actuator_status["mixing_pump"] = "Off"
             self.actuator_status["supply_pump"] = "Off"
 
     def _handle_fertigation(self, group, curr_ec, curr_ph):
+        # 후수 시간(rinse_duration) 동안은 믹싱 펌프를 끄고 공급 펌프만 가동 가능 (생략)
         self.actuator_status["supply_pump"] = "On"
         self.actuator_status["mixing_pump"] = "On"
 
-    def get_actuator_status(self):
-        return self.actuator_status
-
-    def get_irrigation_status(self):
-        return self.irrigation_groups
-
-    def add_group(self, name):
-        self.db.add_group(name)
-        self.refresh_groups()
-
-    def delete_group(self, group_id):
-        self.db.delete_group(group_id)
-        self.refresh_groups()
-
-    def update_group(self, group_id, settings):
-        self.db.update_group(group_id, settings)
-        self.refresh_groups()
+    def get_irrigation_status(self): return self.irrigation_groups
+    def get_actuator_status(self): return self.actuator_status
+    def add_group(self, name): self.db.add_group(name); self.refresh_groups()
+    def delete_group(self, group_id): self.db.delete_group(group_id); self.refresh_groups()
+    def update_group(self, group_id, settings): self.db.update_group(group_id, settings); self.refresh_groups()

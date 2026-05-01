@@ -8,7 +8,7 @@ class DatabaseManager:
 
     def init_db(self):
         with sqlite3.connect(self.db_path) as conn:
-            # 센서 데이터 테이블 (EC, pH 추가)
+            # 센서 데이터 테이블
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS sensor_data (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,7 +17,7 @@ class DatabaseManager:
                     ec REAL, ph REAL
                 )
             """)
-            # 관수 그룹 설정 테이블 (EC, pH 목표값 추가)
+            # 관수 그룹 설정 테이블 (고도화 항목 추가)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS irrigation_groups (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,10 +26,13 @@ class DatabaseManager:
                     start_time TEXT DEFAULT '08:00',
                     end_time TEXT DEFAULT '18:00',
                     solar_threshold REAL DEFAULT 150.0,
+                    min_radiation REAL DEFAULT 50.0,      -- 추가: 최소 적산 일사 강도
+                    fixed_interval INTEGER DEFAULT 120,    -- 추가: 최대 휴지 시간 (분)
                     min_moisture REAL DEFAULT 30.0,
                     target_ec REAL DEFAULT 2.0,
                     target_ph REAL DEFAULT 5.8,
                     duration INTEGER DEFAULT 60,
+                    rinse_duration INTEGER DEFAULT 10,     -- 추가: 후수 시간 (초)
                     interval INTEGER DEFAULT 15
                 )
             """)
