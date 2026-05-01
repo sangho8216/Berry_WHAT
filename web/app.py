@@ -34,58 +34,91 @@ def index():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Berry_WHAT 정밀 양액 제어 시스템</title>
+        <title>Berry_WHAT 통합 제어 시스템</title>
         <style>
-            body { font-family: 'Malgun Gothic', sans-serif; margin: 30px; background-color: #f0f2f0; }
-            .container { max-width: 1200px; margin: auto; }
+            body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 20px; background-color: #f0f2f0; color: #333; }
+            .container { max-width: 1300px; margin: auto; }
+            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
             .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
-            .grid-env { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
-            .env-box { background: #fff; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #d0e0d0; }
-            .val { font-size: 20px; font-weight: bold; color: #2e7d32; display: block; }
-            .group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-            .group-card { border: 1px solid #eee; padding: 15px; border-radius: 10px; position: relative; }
-            .status-tag { position: absolute; top: 15px; right: 15px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; }
+            .monitor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
+            .monitor-box { background: #fff; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #d0e0d0; }
+            .monitor-box b { font-size: 22px; color: #2e7d32; display: block; margin-top: 5px; }
+            .middle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+            .group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+            .group-card { border: 1px solid #eee; padding: 15px; border-radius: 10px; position: relative; background: #fafafa; }
+            .status-tag { position: absolute; top: 15px; right: 15px; padding: 3px 10px; border-radius: 15px; font-size: 11px; font-weight: bold; }
             .tag-watering { background: #e8f5e9; color: #2e7d32; animation: blink 1s infinite; }
             .tag-ready { background: #e3f2fd; color: #1976d2; }
             @keyframes blink { 50% { opacity: 0.5; } }
-            .input-small { width: 60px; padding: 4px; border: 1px solid #ddd; border-radius: 4px; }
-            .label { font-size: 11px; color: #666; margin-top: 5px; }
-            button.save-btn { background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+            .input-field { width: 70px; padding: 5px; border: 1px solid #ddd; border-radius: 4px; }
+            .label { font-size: 12px; color: #666; font-weight: bold; }
+            button { cursor: pointer; border-radius: 4px; font-weight: bold; transition: 0.2s; }
+            .btn-save { background: #4caf50; color: white; border: none; padding: 8px 15px; }
+            .btn-add { background: #2196f3; color: white; border: none; padding: 10px 20px; }
+            .actuator-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+            .act-on { color: #2196f3; font-weight: bold; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>🌿 Berry_WHAT 통합 양액 및 환경제어</h1>
-            
-            <div class="grid-env">
-                <div class="env-box"><span>온도</span><b id="temp" class="val">--</b></div>
-                <div class="env-box"><span>VPD</span><b id="vpd" class="val">--</b></div>
-                <div class="env-box"><span>일사적산</span><b id="solar" class="val">--</b></div>
-                <div class="env-box"><span>수분</span><b id="moist" class="val">--</b></div>
-                <div class="env-box"><span>EC</span><b id="ec" class="val">--</b></div>
-                <div class="env-box"><span>pH</span><b id="ph" class="val">--</b></div>
+            <div class="header">
+                <h1>🌿 Berry_WHAT 통합 제어 시스템</h1>
+                <div id="conn-info">상태: <b id="status-text">--</b> | 모드: <b id="mode-text">--</b></div>
             </div>
-
+            <div class="monitor-grid">
+                <div class="monitor-box"><span>온도</span><b id="temp">--</b></div>
+                <div class="monitor-box"><span>습도</span><b id="hum">--</b></div>
+                <div class="monitor-box"><span>VPD</span><b id="vpd">--</b></div>
+                <div class="monitor-box"><span>일사적산</span><b id="solar">--</b></div>
+                <div class="monitor-box"><span>EC</span><b id="ec">--</b></div>
+                <div class="monitor-box"><span>pH</span><b id="ph">--</b></div>
+            </div>
+            <div class="middle-grid">
+                <div class="card">
+                    <h2>🌡️ 대기 환경 설정</h2>
+                    <div style="display:flex; gap:30px;">
+                        <div><label class="label">목표 온도 (°C)</label><br><input type="number" id="target_temp" class="input-field" step="0.5"></div>
+                        <div><label class="label">온도 편차 (Deadband)</label><br><input type="number" id="temp_deadband" class="input-field" step="0.1"></div>
+                        <button class="btn-save" style="margin-top:18px;" onclick="saveAirSettings()">대기 설정 적용</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>⚙️ 구동 장치 상태</h2>
+                    <div id="actuator-list"></div>
+                </div>
+            </div>
             <div class="card">
-                <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                    <h2>관수 구역 및 양액 설정</h2>
-                    <button onclick="addGroup()">+ 구역 추가</button>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <h2>💧 관수 및 양액 구역별 세부 설정</h2>
+                    <button class="btn-add" onclick="addGroup()">+ 새 구역 추가</button>
                 </div>
                 <div class="group-grid" id="group-container"></div>
             </div>
         </div>
-
         <script>
             function updateUI() {
                 fetch('/api/data').then(r => r.json()).then(data => {
+                    document.getElementById('status-text').innerText = data.status || 'Disconnected';
                     document.getElementById('temp').innerText = (data.temp || 0) + '°C';
+                    document.getElementById('hum').innerText = (data.humidity || 0) + '%';
                     document.getElementById('vpd').innerText = (data.vpd || 0) + ' kPa';
                     document.getElementById('solar').innerText = data.solar_accumulation || 0;
-                    document.getElementById('moist').innerText = (data.moisture || 0) + '%';
-                    document.getElementById('ec').innerText = (data.ec || 0) + ' dS/m';
+                    document.getElementById('ec').innerText = (data.ec || 0);
                     document.getElementById('ph').innerText = (data.ph || 0);
                 });
-
+                fetch('/api/status').then(r => r.json()).then(status => {
+                    document.getElementById('mode-text').innerText = status.mode;
+                    let actHtml = '';
+                    for (const [key, val] of Object.entries(status.actuators)) {
+                        const activeClass = (val !== 'Off' && val !== 'Closed') ? 'act-on' : '';
+                        actHtml += '<div class="actuator-item"><span>' + key + '</span><b class="' + activeClass + '">' + val + '</b></div>';
+                    }
+                    document.getElementById('actuator-list').innerHTML = actHtml;
+                    if(!document.activeElement.classList.contains('input-field')) {
+                        document.getElementById('target_temp').value = status.air_settings.target_temp;
+                        document.getElementById('temp_deadband').value = status.air_settings.temp_deadband;
+                    }
+                });
                 fetch('/api/groups').then(r => r.json()).then(groups => {
                     const container = document.getElementById('group-container');
                     let html = '';
@@ -94,22 +127,30 @@ def index():
                         html += '<div class="group-card">' +
                                 '<span class="status-tag ' + tagClass + '">' + g.status + '</span>' +
                                 '<h3>' + g.name + '</h3>' +
-                                '<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">' +
-                                '<div><label class="label">목표 EC</label><br><input class="input-small" id="ec-' + g.id + '" value="' + g.target_ec + '"></div>' +
-                                '<div><label class="label">목표 pH</label><br><input class="input-small" id="ph-' + g.id + '" value="' + g.target_ph + '"></div>' +
-                                '<div><label class="label">일사 임계</label><br><input class="input-small" id="solar-' + g.id + '" value="' + g.solar_threshold + '"></div>' +
-                                '<div><label class="label">최저 수분</label><br><input class="input-small" id="moist-' + g.id + '" value="' + g.min_moisture + '"></div>' +
+                                '<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">' +
+                                '<div><label class="label">시작/종료</label><br>' + g.start_time + '~' + g.end_time + '</div>' +
+                                '<div><label class="label">활성화</label> <input type="checkbox" ' + (g.enabled ? 'checked' : '') + ' onchange="toggleGroup(' + g.id + ', this.checked)"></div>' +
+                                '<div><label class="label">목표 EC</label><br><input class="input-field" id="ec-' + g.id + '" value="' + g.target_ec + '"></div>' +
+                                '<div><label class="label">목표 pH</label><br><input class="input-field" id="ph-' + g.id + '" value="' + g.target_ph + '"></div>' +
+                                '<div><label class="label">일사임계</label><br><input class="input-field" id="solar-' + g.id + '" value="' + g.solar_threshold + '"></div>' +
+                                '<div><label class="label">최저수분</label><br><input class="input-field" id="moist-' + g.id + '" value="' + g.min_moisture + '"></div>' +
                                 '</div>' +
-                                '<div style="margin-top: 15px;">' +
-                                '<button class="save-btn" onclick="saveGroup(' + g.id + ')">설정 저장</button>' +
-                                '<button onclick="deleteGroup(' + g.id + ')" style="background:none; border:none; color:red; cursor:pointer; font-size:12px; margin-left:10px;">삭제</button>' +
-                                '</div>' +
-                                '</div>';
+                                '<div style="margin-top:15px; display:flex; justify-content:space-between;">' +
+                                '<button class="btn-save" onclick="saveGroup(' + g.id + ')">구역설정 저장</button>' +
+                                '<button onclick="deleteGroup(' + g.id + ')" style="color:red; background:none; border:none; cursor:pointer;">삭제</button>' +
+                                '</div></div>';
                     });
                     container.innerHTML = html;
                 });
             }
-
+            function saveAirSettings() {
+                const settings = {
+                    target_temp: parseFloat(document.getElementById('target_temp').value),
+                    temp_deadband: parseFloat(document.getElementById('temp_deadband').value)
+                };
+                fetch('/api/air/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(settings) })
+                .then(() => alert('대기 설정 적용됨'));
+            }
             function saveGroup(id) {
                 const settings = {
                     target_ec: parseFloat(document.getElementById('ec-' + id).value),
@@ -118,23 +159,42 @@ def index():
                     min_moisture: parseFloat(document.getElementById('moist-' + id).value)
                 };
                 fetch('/api/groups/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id, settings}) })
-                .then(() => alert('설정 저장됨'));
+                .then(() => alert('구역설정 저장됨'));
             }
-
             function addGroup() {
-                const name = prompt("구역 이름:");
+                const name = prompt("새 구역 이름:");
                 if(name) fetch('/api/groups/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name}) }).then(updateUI);
             }
             function deleteGroup(id) {
-                if(confirm("삭제하시겠습니까?")) fetch('/api/groups/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id}) }).then(updateUI);
+                if(confirm("삭제?")) fetch('/api/groups/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id}) }).then(updateUI);
             }
-
+            function toggleGroup(id, enabled) {
+                fetch('/api/groups/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id, settings: {enabled: enabled ? 1 : 0}}) });
+            }
             setInterval(updateUI, 2000);
             updateUI();
         </script>
     </body>
     </html>
     """
+
+@app.route('/api/status')
+def get_status():
+    return jsonify({
+        "mode": state.mode,
+        "actuators": state.control.get_actuator_status(),
+        "air_settings": {
+            "target_temp": state.control.target_temp,
+            "temp_deadband": state.control.temp_deadband
+        }
+    })
+
+@app.route('/api/air/update', methods=['POST'])
+def update_air():
+    data = request.json
+    state.control.target_temp = data['target_temp']
+    state.control.temp_deadband = data['temp_deadband']
+    return jsonify({"status": "success"})
 
 @app.route('/api/groups')
 def get_groups():
