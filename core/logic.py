@@ -8,14 +8,16 @@ class SystemControl:
         self.air = AirController()
         self.soil = SoilController()
         
+        # 스킬 기반 대기 환경 설정
         self.target_temp = 22.0
         self.temp_deadband = 2.0
+        self.target_vpd_min = 0.8  # kPa (스킬 권장 최소값)
+        self.target_vpd_max = 1.2  # kPa (스킬 권장 최대값)
         
         self.refresh_groups()
-        # 공조 및 공용 장치 상태
         self.actuator_status = {
             "vents": "Closed", "fans": "Off", "heater": "Off",
-            "mixing_pump": "Off", "supply_pump": "Off"
+            "misters": "Off", "mixing_pump": "Off", "supply_pump": "Off"
         }
 
     def refresh_groups(self):
@@ -34,31 +36,48 @@ class SystemControl:
 
     def process(self, data, collector=None):
         temp = data.get("temp", 20)
+        vpd = data.get("vpd", 1.0)
+        solar_rad = data.get("solar_radiation", 0)
+        solar_acc = data.get("solar_accumulation", 0)
+        moisture = data.get("moisture", 0)
         curr_ec = data.get("ec", 0)
         curr_ph = data.get("ph", 7)
         now = datetime.now()
 
-        # 1. 공조 제어
+        # 1. 스킬 기반 대기 & VPD 제어
+        # 온도 제어 (Deadband)
         if temp > self.target_temp + self.temp_deadband:
             self.air.adjust_environment("OPEN_VENTS")
-            self.actuator_status["vents"] = "Open"
+            self.actuator_status["vents"] = "Open (Cooling)"
         elif temp < self.target_temp - self.temp_deadband:
             self.air.adjust_environment("CLOSE_VENTS")
             self.actuator_status["vents"] = "Closed"
+            self.actuator_status["heater"] = "On"
+        else:
+            self.actuator_status["heater"] = "Off"
 
-        # 2. 통합 관수 및 양액 제어
-        solar_acc = data.get("solar_accumulation", 0)
-        moisture = data.get("moisture", 0)
-        
+        # VPD 제어 (습도 최적화)
+        if vpd < self.target_vpd_min:
+            # 너무 습함 -> 환기 증대 (Purge & Reheat)
+            self.air.adjust_environment("INCREASE_VENTILATION")
+            self.actuator_status["vents"] = "Purge (Dehumid)"
+        elif vpd > self.target_vpd_max:
+            # 너무 건조함 -> 미스트 가동
+            self.air.adjust_environment("START_MISTERS")
+            self.actuator_status["misters"] = "On"
+        else:
+            self.actuator_status["misters"] = "Off"
+
+        # 2. 스킬 기반 관수 제어 (Multi-Group)
         any_watering = False
-
         for group in self.irrigation_groups:
             if not group["enabled"]:
                 group["status"] = "Disabled"
                 continue
 
-            # 휴지기 및 시간 윈도우 체크
             can_irrigate = self.is_within_time(group)
+            
+            # 휴지기 체크
             if group["last_irrigation_time"]:
                 elapsed = (now - group["last_irrigation_time"]).total_seconds() / 60
                 if elapsed < group["interval"]:
@@ -66,20 +85,19 @@ class SystemControl:
                     group["status"] = f"Wait({int(group['interval']-elapsed)}m)"
             
             if group["status"] == "Watering":
-                # 현재 관수 중인 경우 믹싱 및 공급 펌프 작동
                 any_watering = True
                 self._handle_fertigation(group, curr_ec, curr_ph)
-                
-                # 관수 시간 종료 체크 (간단한 예시를 위해 60초 후 종료 가정)
                 if (now - group["last_irrigation_time"]).total_seconds() >= group["duration"]:
                     group["status"] = "Ready"
                     self.soil.stop_irrigation(line_id=group["id"])
             
             elif can_irrigate:
                 triggered = False
-                if solar_acc >= group["solar_threshold"]:
+                # 일사 기반 (가중치: 일사 강도가 있을 때만 적산 유효성 판단 가능)
+                if solar_acc >= group["solar_threshold"] and solar_rad > 50:
                     triggered = True
                     if collector: collector.reset_solar_accumulation()
+                # 수분 기반 (안전 보장)
                 elif moisture < group["min_moisture"]:
                     triggered = True
 
@@ -96,18 +114,8 @@ class SystemControl:
             self.actuator_status["supply_pump"] = "Off"
 
     def _handle_fertigation(self, group, curr_ec, curr_ph):
-        """양액 농도(EC) 및 산도(pH) 조절 로직"""
         self.actuator_status["supply_pump"] = "On"
         self.actuator_status["mixing_pump"] = "On"
-        
-        # EC 조절 (A/B액 투입)
-        if curr_ec < group["target_ec"] - 0.1:
-            # Modbus 등으로 A/B 밸브 제어 코드 가능
-            pass 
-        
-        # pH 조절 (산성액 투입)
-        if curr_ph > group["target_ph"] + 0.1:
-            pass
 
     def get_actuator_status(self):
         return self.actuator_status
