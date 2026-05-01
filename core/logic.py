@@ -3,32 +3,26 @@ from control.air import AirController
 from control.soil import SoilController
 
 class SystemControl:
-    def __init__(self):
+    def __init__(self, db_manager):
+        self.db = db_manager
         self.air = AirController()
         self.soil = SoilController()
         
         self.target_temp = 22.0
         self.temp_deadband = 2.0
         
-        # 관수 그룹 설정 (Hoogendoorn Valve Groups)
-        self.irrigation_groups = [
-            {
-                "id": 1, "name": "A구역 (딸기)", "enabled": True,
-                "start_time": "08:00", "end_time": "18:00",
-                "solar_threshold": 150.0, "min_moisture": 30.0,
-                "duration": 60, "interval": 15,
-                "last_irrigation_time": None, "status": "Ready"
-            },
-            {
-                "id": 2, "name": "B구역 (토마토)", "enabled": False,
-                "start_time": "07:00", "end_time": "19:00",
-                "solar_threshold": 200.0, "min_moisture": 25.0,
-                "duration": 120, "interval": 30,
-                "last_irrigation_time": None, "status": "Ready"
-            }
-        ]
-        
+        # DB에서 그룹 로드 및 상태 초기화
+        self.refresh_groups()
         self.actuator_status = {"vents": "Closed", "fans": "Off", "heater": "Off"}
+
+    def refresh_groups(self):
+        db_groups = self.db.get_groups()
+        # 실시간 상태(status, last_irrigation_time)는 메모리에서 관리
+        self.irrigation_groups = []
+        for g in db_groups:
+            g["status"] = "Ready"
+            g["last_irrigation_time"] = None
+            self.irrigation_groups.append(g)
 
     def is_within_time(self, group):
         now = datetime.now().time()
@@ -40,7 +34,7 @@ class SystemControl:
         temp = data.get("temp")
         now = datetime.now()
 
-        # 1. 공조 제어
+        # 공조 제어
         if temp > self.target_temp + self.temp_deadband:
             self.air.adjust_environment("OPEN_VENTS")
             self.actuator_status["vents"] = "Open"
@@ -48,7 +42,7 @@ class SystemControl:
             self.air.adjust_environment("CLOSE_VENTS")
             self.actuator_status["vents"] = "Closed"
 
-        # 2. 그룹별 관수 제어
+        # 그룹별 관수 제어
         solar_acc = data.get("solar_accumulation", 0)
         moisture = data.get("moisture", 0)
 
@@ -57,13 +51,11 @@ class SystemControl:
                 group["status"] = "Disabled"
                 continue
 
-            # 기본 상태는 Ready
             if group["status"] not in ["Watering", "Disabled"]:
                 group["status"] = "Ready"
 
             can_irrigate = self.is_within_time(group)
             
-            # 휴지 시간 체크
             if group["last_irrigation_time"]:
                 elapsed = (now - group["last_irrigation_time"]).total_seconds() / 60
                 if elapsed < group["interval"]:
@@ -79,20 +71,23 @@ class SystemControl:
                     triggered = True
 
             if triggered:
-                self.soil.irrigate(group["duration"])
+                self.soil.irrigate(group["duration"], line_id=group["id"])
                 group["last_irrigation_time"] = now
                 group["status"] = "Watering"
             elif can_irrigate and group["status"] == "Ready":
                 group["status"] = "Monitoring"
 
-    def update_group_settings(self, group_id, new_settings):
-        for group in self.irrigation_groups:
-            if group["id"] == group_id:
-                group.update(new_settings)
-                break
-
-    def get_actuator_status(self):
-        return self.actuator_status
-
     def get_irrigation_status(self):
         return self.irrigation_groups
+
+    def add_group(self, name):
+        self.db.add_group(name)
+        self.refresh_groups()
+
+    def delete_group(self, group_id):
+        self.db.delete_group(group_id)
+        self.refresh_groups()
+
+    def update_group(self, group_id, settings):
+        self.db.update_group(group_id, settings)
+        self.refresh_groups()
