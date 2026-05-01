@@ -8,15 +8,16 @@ class DatabaseManager:
 
     def init_db(self):
         with sqlite3.connect(self.db_path) as conn:
-            # 센서 데이터 테이블
+            # 센서 데이터 테이블 (EC, pH 추가)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS sensor_data (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    temp REAL, humidity REAL, vpd REAL, solar_acc REAL, moisture REAL
+                    temp REAL, humidity REAL, vpd REAL, solar_acc REAL, moisture REAL,
+                    ec REAL, ph REAL
                 )
             """)
-            # 관수 그룹 설정 테이블
+            # 관수 그룹 설정 테이블 (EC, pH 목표값 추가)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS irrigation_groups (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,22 +27,22 @@ class DatabaseManager:
                     end_time TEXT DEFAULT '18:00',
                     solar_threshold REAL DEFAULT 150.0,
                     min_moisture REAL DEFAULT 30.0,
+                    target_ec REAL DEFAULT 2.0,
+                    target_ph REAL DEFAULT 5.8,
                     duration INTEGER DEFAULT 60,
                     interval INTEGER DEFAULT 15
                 )
             """)
-            # 기본 그룹 생성 (비어있을 경우)
-            cursor = conn.execute("SELECT count(*) FROM irrigation_groups")
-            if cursor.fetchone()[0] == 0:
-                conn.execute("INSERT INTO irrigation_groups (name) VALUES ('기본 구역')")
             conn.commit()
 
     def save_sensor_data(self, data):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                INSERT INTO sensor_data (temp, humidity, vpd, solar_acc, moisture)
-                VALUES (?, ?, ?, ?, ?)
-            """, (data.get('temp'), data.get('humidity'), data.get('vpd'), data.get('solar_accumulation'), data.get('moisture')))
+                INSERT INTO sensor_data (temp, humidity, vpd, solar_acc, moisture, ec, ph)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (data.get('temp'), data.get('humidity'), data.get('vpd'), 
+                  data.get('solar_accumulation'), data.get('moisture'),
+                  data.get('ec'), data.get('ph')))
             conn.commit()
 
     def get_history(self, limit=50):
@@ -50,7 +51,6 @@ class DatabaseManager:
             cursor = conn.execute("SELECT * FROM sensor_data ORDER BY timestamp DESC LIMIT ?", (limit,))
             return [dict(row) for row in cursor.fetchall()][::-1]
 
-    # 그룹 관리 CRUD
     def get_groups(self):
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
