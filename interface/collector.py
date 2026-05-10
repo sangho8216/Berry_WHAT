@@ -53,6 +53,9 @@ class SimulatedCollector(BaseCollector):
             "tank_a": round(self.tank_a, 1),
             "tank_b": round(self.tank_b, 1),
             "tank_acid": round(self.tank_acid, 1),
+            "flow_rate": round(self.flow_rate + random.uniform(-0.5, 0.5), 1),
+            "water_temp": round(self.water_temp + random.uniform(-0.2, 0.2), 1),
+            "mixing_tank_level": round(self.mixing_tank_level + random.uniform(-0.1, 0.1), 1),
             "vpd": self.calculate_vpd(self.temp, self.humidity)
         }
 

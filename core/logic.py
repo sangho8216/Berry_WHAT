@@ -24,6 +24,12 @@ class SystemControl:
         self.target_vpd_min = self.db.get_config("target_vpd_min", 0.8)
         self.target_vpd_max = self.db.get_config("target_vpd_max", 1.2)
         
+        # PID & Fertigation Settings
+        self.target_water_temp = float(self.db.get_config("target_water_temp", 20.0))
+        self.ec_p_band = float(self.db.get_config("ec_p_band", 10.0))
+        self.ph_p_band = float(self.db.get_config("ph_p_band", 10.0))
+        self.flow_pre_control = float(self.db.get_config("flow_pre_control", 50.0))
+        
         self.refresh_groups()
         
         # Fertigation State Machine
@@ -34,6 +40,7 @@ class SystemControl:
         self.actuator_status = {
             "vents": "Closed", "fans": "Off", "heater": "Off",
             "misters": "Off", "mixing_pump": "Off", "supply_pump": "Off",
+            "mixing_valve": "Closed",
             "state": self.STANDBY
         }
 

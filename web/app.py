@@ -80,6 +80,16 @@ def index():
                         <button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="saveAir()">설정 적용</button>
                     </div>
                     <div class="card">
+                        <h2>🧪 정밀 양액 설정 (PID)</h2>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                            <div><label class="label">EC P Band</label><br><input id="ec_p_band" class="input-field"></div>
+                            <div><label class="label">pH P Band</label><br><input id="ph_p_band" class="input-field"></div>
+                            <div><label class="label">사전 유량(l/m)</label><br><input id="flow_pre_control" class="input-field"></div>
+                            <div><label class="label">목표 수온(°C)</label><br><input id="target_water_temp" class="input-field"></div>
+                        </div>
+                        <button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="savePid()">PID 설정 적용</button>
+                    </div>
+                    <div class="card">
                         <h2>⚙️ 장치 상태</h2>
                         <div id="actuator-list"></div>
                     </div>
@@ -127,6 +137,9 @@ def index():
                     document.getElementById('moist').innerText = data.moisture + '%';
                     document.getElementById('ec').innerText = data.ec;
                     document.getElementById('ph').innerText = data.ph;
+                    if(data.flow_rate !== undefined) document.getElementById('flow_rate').innerText = data.flow_rate;
+                    if(data.water_temp !== undefined) document.getElementById('water_temp').innerText = data.water_temp;
+                    if(data.mixing_tank_level !== undefined) document.getElementById('mixing_tank_level').innerText = data.mixing_tank_level;
                     document.getElementById('tank_a_bar').style.width = data.tank_a + '%';
                     document.getElementById('tank_b_bar').style.width = data.tank_b + '%';
                     document.getElementById('tank_acid_bar').style.width = data.tank_acid + '%';
@@ -228,6 +241,10 @@ def get_data(): return jsonify(state.current_data)
 
 if __name__ == '__main__':
     t = threading.Thread(target=control_loop)
+    t.daemon = True
+    t.start()
+    app.run(host='0.0.0.0', port=5000)
+d(target=control_loop)
     t.daemon = True
     t.start()
     app.run(host='0.0.0.0', port=5000)
