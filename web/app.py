@@ -39,7 +39,7 @@ def index():
             body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #eceff1; }
             .container { max-width: 1400px; margin: auto; }
             .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-            .grid-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
+            .grid-9 { display: grid; grid-template-columns: repeat(9, 1fr); gap: 10px; margin-bottom: 20px; }
             .monitor-box { background: #fff; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #cfd8dc; }
             .monitor-box b { font-size: 22px; color: #2e7d32; display: block; }
             .state-banner { padding: 12px; border-radius: 8px; font-weight: bold; text-align: center; margin-bottom: 20px; font-size: 16px; }
@@ -61,13 +61,16 @@ def index():
     <body>
         <div class="container">
             <div id="system-state" class="state-banner state-standby">SYSTEM STANDBY</div>
-            <div class="grid-6">
+            <div class="grid-9">
                 <div class="monitor-box"><span>온도</span><b id="temp">--</b></div>
                 <div class="monitor-box"><span>VPD</span><b id="vpd">--</b></div>
                 <div class="monitor-box"><span>일사적산</span><b id="solar">--</b></div>
                 <div class="monitor-box"><span>토양수분</span><b id="moist">--</b></div>
                 <div class="monitor-box"><span>EC</span><b id="ec">--</b></div>
                 <div class="monitor-box"><span>pH</span><b id="ph">--</b></div>
+                <div class="monitor-box"><span>유량(l/min)</span><b id="flow_rate">--</b></div>
+                <div class="monitor-box"><span>관수수온(°C)</span><b id="water_temp">--</b></div>
+                <div class="monitor-box"><span>믹싱수위(%)</span><b id="mixing_tank_level">--</b></div>
             </div>
             <div class="main-layout">
                 <div>
@@ -84,8 +87,8 @@ def index():
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                             <div><label class="label">EC P Band</label><br><input id="ec_p_band" class="input-field"></div>
                             <div><label class="label">pH P Band</label><br><input id="ph_p_band" class="input-field"></div>
-                            <div><label class="label">사전 유량(l/m)</label><br><input id="flow_pre_control" class="input-field"></div>
-                            <div><label class="label">목표 수온(°C)</label><br><input id="target_water_temp" class="input-field"></div>
+                            <div><label class="label">사전유량(l/m)</label><br><input id="flow_pre_control" class="input-field"></div>
+                            <div><label class="label">목표수온(°C)</label><br><input id="target_water_temp" class="input-field"></div>
                         </div>
                         <button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="savePid()">PID 설정 적용</button>
                     </div>
@@ -143,6 +146,9 @@ def index():
                     document.getElementById('tank_a_bar').style.width = data.tank_a + '%';
                     document.getElementById('tank_b_bar').style.width = data.tank_b + '%';
                     document.getElementById('tank_acid_bar').style.width = data.tank_acid + '%';
+                    document.getElementById('tank_a_val').innerText = data.tank_a + '%';
+                    document.getElementById('tank_b_val').innerText = data.tank_b + '%';
+                    document.getElementById('tank_acid_val').innerText = data.tank_acid + '%';
                 });
                 fetch('/api/status').then(r => r.json()).then(status => {
                     const stateEl = document.getElementById('system-state');
@@ -157,6 +163,12 @@ def index():
                     if(!document.activeElement.classList.contains('input-field')) {
                         document.getElementById('target_temp').value = status.air.target_temp;
                         document.getElementById('temp_deadband').value = status.air.temp_deadband;
+                        if(status.pid) {
+                            document.getElementById('ec_p_band').value = status.pid.ec_p_band;
+                            document.getElementById('ph_p_band').value = status.pid.ph_p_band;
+                            document.getElementById('flow_pre_control').value = status.pid.flow_pre_control;
+                            document.getElementById('target_water_temp').value = status.pid.target_water_temp;
+                        }
                     }
                 });
                 fetch('/api/groups').then(r => r.json()).then(groups => {
@@ -194,6 +206,15 @@ def index():
                 const s = { target_temp: parseFloat(document.getElementById('target_temp').value), temp_deadband: parseFloat(document.getElementById('temp_deadband').value) };
                 fetch('/api/air/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(s) }).then(() => alert('설정 저장됨'));
             }
+            function savePid() {
+                const s = {
+                    ec_p_band: parseFloat(document.getElementById('ec_p_band').value),
+                    ph_p_band: parseFloat(document.getElementById('ph_p_band').value),
+                    flow_pre_control: parseFloat(document.getElementById('flow_pre_control').value),
+                    target_water_temp: parseFloat(document.getElementById('target_water_temp').value)
+                };
+                fetch('/api/pid/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(s) }).then(() => alert('PID 설정 저장됨'));
+            }
             function addGroup() {
                 const name = prompt("구역 이름:");
                 if(name) fetch('/api/groups/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name}) }).then(updateUI);
@@ -210,7 +231,13 @@ def get_status():
     return jsonify({
         "mode": state.mode,
         "actuators": state.control.get_actuator_status(),
-        "air": {"target_temp": state.control.target_temp, "temp_deadband": state.control.temp_deadband}
+        "air": {"target_temp": state.control.target_temp, "temp_deadband": state.control.temp_deadband},
+        "pid": {
+            "ec_p_band": getattr(state.control, "ec_p_band", 10.0),
+            "ph_p_band": getattr(state.control, "ph_p_band", 10.0),
+            "flow_pre_control": getattr(state.control, "flow_pre_control", 50.0),
+            "target_water_temp": getattr(state.control, "target_water_temp", 20.0)
+        }
     })
 
 @app.route('/api/air/update', methods=['POST'])
@@ -220,6 +247,19 @@ def update_air():
     state.control.temp_deadband = data['temp_deadband']
     state.db.set_config("target_temp", data['target_temp'])
     state.db.set_config("temp_deadband", data['temp_deadband'])
+    return jsonify({"status": "success"})
+
+@app.route('/api/pid/update', methods=['POST'])
+def update_pid():
+    data = request.json
+    state.control.ec_p_band = data.get('ec_p_band', 10.0)
+    state.control.ph_p_band = data.get('ph_p_band', 10.0)
+    state.control.flow_pre_control = data.get('flow_pre_control', 50.0)
+    state.control.target_water_temp = data.get('target_water_temp', 20.0)
+    state.db.set_config("ec_p_band", state.control.ec_p_band)
+    state.db.set_config("ph_p_band", state.control.ph_p_band)
+    state.db.set_config("flow_pre_control", state.control.flow_pre_control)
+    state.db.set_config("target_water_temp", state.control.target_water_temp)
     return jsonify({"status": "success"})
 
 @app.route('/api/groups')
@@ -241,10 +281,6 @@ def get_data(): return jsonify(state.current_data)
 
 if __name__ == '__main__':
     t = threading.Thread(target=control_loop)
-    t.daemon = True
-    t.start()
-    app.run(host='0.0.0.0', port=5000)
-d(target=control_loop)
     t.daemon = True
     t.start()
     app.run(host='0.0.0.0', port=5000)
