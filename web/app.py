@@ -35,6 +35,7 @@ def index():
     <html>
     <head>
         <title>Berry_WHAT Expert 제어</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
             body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #eceff1; }
             .container { max-width: 1400px; margin: auto; }
@@ -304,6 +305,10 @@ def update_group():
 
 @app.route('/api/data')
 def get_data(): return jsonify(state.current_data)
+
+@app.route('/api/history')
+def get_history():
+    return jsonify(state.db.get_history(limit=60))
 
 if __name__ == '__main__':
     t = threading.Thread(target=control_loop)
