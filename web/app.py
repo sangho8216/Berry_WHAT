@@ -20,12 +20,17 @@ class SystemState:
 state = SystemState()
 
 def control_loop():
+    loop_counter = 0
     while state.running:
         data = state.collector.collect_signals(actuator_status=state.control.get_actuator_status())
         if "error" not in data:
             data["status"] = "Connected"
             state.current_data = data
             state.control.process(data, collector=state.collector)
+            loop_counter += 1
+            if loop_counter >= 5:
+                state.db.save_sensor_data(data)
+                loop_counter = 0
         time.sleep(2)
 
 @app.route('/')
@@ -58,21 +63,22 @@ def index():
             .tank-bar { height: 15px; background: #e0e0e0; border-radius: 7px; overflow: hidden; margin-top: 5px; }
             .tank-fill { height: 100%; background: #43a047; transition: 0.5s; width: 0%; }
         </style>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
     <body>
         <div class="container">
             <div id="system-state" class="state-banner state-standby">SYSTEM STANDBY</div>
             <div class="grid-10">
-                <div class="monitor-box"><span>온도</span><b id="temp">--</b></div>
-                <div class="monitor-box"><span>VPD</span><b id="vpd">--</b></div>
-                <div class="monitor-box"><span>일사적산</span><b id="solar">--</b></div>
-                <div class="monitor-box"><span>토양수분</span><b id="moist">--</b></div>
-                <div class="monitor-box"><span>EC</span><b id="ec">--</b></div>
-                <div class="monitor-box"><span>pH</span><b id="ph">--</b></div>
-                <div class="monitor-box"><span>유량(l/min)</span><b id="flow_rate">--</b></div>
-                <div class="monitor-box"><span>관수수온(°C)</span><b id="water_temp">--</b></div>
-                <div class="monitor-box"><span>믹싱수위(%)</span><b id="mixing_tank_level">--</b></div>
-                <div class="monitor-box"><span>EC수온(°C)</span><b id="ec_temp">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('temp', '온도')"><span>온도</span><b id="temp">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('vpd', 'VPD')"><span>VPD</span><b id="vpd">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('solar_acc', '일사적산')"><span>일사적산</span><b id="solar">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('moisture', '토양수분')"><span>토양수분</span><b id="moist">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('ec', 'EC')"><span>EC</span><b id="ec">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('ph', 'pH')"><span>pH</span><b id="ph">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('flow_rate', '유량(l/min)')"><span>유량(l/min)</span><b id="flow_rate">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('water_temp', '관수수온(°C)')"><span>관수수온(°C)</span><b id="water_temp">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('mixing_tank_level', '믹싱수위(%)')"><span>믹싱수위(%)</span><b id="mixing_tank_level">--</b></div>
+                <div class="monitor-box" style="cursor:pointer;" onclick="showChart('ec_temp', 'EC수온(°C)')"><span>EC수온(°C)</span><b id="ec_temp">--</b></div>
             </div>
             <div class="main-layout">
                 <div>
@@ -118,6 +124,17 @@ def index():
                 </div>
             </div>
         </div>
+        
+        <div id="chartModal" class="modal">
+            <div class="modal-content" style="width:700px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:15px;">
+                    <h2 id="chart-modal-title" style="margin:0;">데이터 이력</h2>
+                    <span style="cursor:pointer; font-size:24px;" onclick="closeChart()">&times;</span>
+                </div>
+                <canvas id="historyChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+
         <div id="detailModal" class="modal">
             <div class="modal-content">
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:15px;">
@@ -137,6 +154,43 @@ def index():
             </div>
         </div>
         <script>
+            
+            let historyChartInstance = null;
+            function showChart(key, label) {
+                document.getElementById('chart-modal-title').innerText = label + ' 이력';
+                document.getElementById('chartModal').style.display = 'block';
+                fetch('/api/history').then(r => r.json()).then(data => {
+                    const labels = data.map(d => {
+                        const date = new Date(d.timestamp);
+                        return date.getHours() + ':' + date.getMinutes() + ':' + date.getSeconds();
+                    });
+                    const values = data.map(d => d[key]);
+                    
+                    const ctx = document.getElementById('historyChart').getContext('2d');
+                    if(historyChartInstance) {
+                        historyChartInstance.destroy();
+                    }
+                    historyChartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: label,
+                                data: values,
+                                borderColor: '#2e7d32',
+                                backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                                fill: true,
+                                tension: 0.1
+                            }]
+                        },
+                        options: { animation: false }
+                    });
+                });
+            }
+            function closeChart() {
+                document.getElementById('chartModal').style.display = 'none';
+            }
+
             let currentGroups = [];
             function updateUI() {
                 fetch('/api/data').then(r => r.json()).then(data => {
