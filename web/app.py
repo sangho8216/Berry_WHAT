@@ -39,7 +39,7 @@ def index():
             body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #eceff1; }
             .container { max-width: 1400px; margin: auto; }
             .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-            .grid-9 { display: grid; grid-template-columns: repeat(9, 1fr); gap: 10px; margin-bottom: 20px; }
+            .grid-10 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px; margin-bottom: 20px; }
             .monitor-box { background: #fff; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #cfd8dc; }
             .monitor-box b { font-size: 22px; color: #2e7d32; display: block; }
             .state-banner { padding: 12px; border-radius: 8px; font-weight: bold; text-align: center; margin-bottom: 20px; font-size: 16px; }
@@ -61,7 +61,7 @@ def index():
     <body>
         <div class="container">
             <div id="system-state" class="state-banner state-standby">SYSTEM STANDBY</div>
-            <div class="grid-9">
+            <div class="grid-10">
                 <div class="monitor-box"><span>온도</span><b id="temp">--</b></div>
                 <div class="monitor-box"><span>VPD</span><b id="vpd">--</b></div>
                 <div class="monitor-box"><span>일사적산</span><b id="solar">--</b></div>
@@ -71,6 +71,7 @@ def index():
                 <div class="monitor-box"><span>유량(l/min)</span><b id="flow_rate">--</b></div>
                 <div class="monitor-box"><span>관수수온(°C)</span><b id="water_temp">--</b></div>
                 <div class="monitor-box"><span>믹싱수위(%)</span><b id="mixing_tank_level">--</b></div>
+                <div class="monitor-box"><span>EC수온(°C)</span><b id="ec_temp">--</b></div>
             </div>
             <div class="main-layout">
                 <div>
@@ -89,6 +90,10 @@ def index():
                             <div><label class="label">pH P Band</label><br><input id="ph_p_band" class="input-field"></div>
                             <div><label class="label">사전유량(l/m)</label><br><input id="flow_pre_control" class="input-field"></div>
                             <div><label class="label">목표수온(°C)</label><br><input id="target_water_temp" class="input-field"></div>
+                            <div><label class="label">최소용량(%)</label><br><input id="valve_min_capacity" class="input-field"></div>
+                            <div><label class="label">최대용량(%)</label><br><input id="valve_max_capacity" class="input-field"></div>
+                            <div><label class="label">파인튜닝(EC)</label><br><input id="ec_fine_tuning" class="input-field"></div>
+                            <div><label class="label">고속닫힘(EC)</label><br><input id="ec_high_speed_close" class="input-field"></div>
                         </div>
                         <button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="savePid()">PID 설정 적용</button>
                     </div>
@@ -143,6 +148,7 @@ def index():
                     if(data.flow_rate !== undefined) document.getElementById('flow_rate').innerText = data.flow_rate;
                     if(data.water_temp !== undefined) document.getElementById('water_temp').innerText = data.water_temp;
                     if(data.mixing_tank_level !== undefined) document.getElementById('mixing_tank_level').innerText = data.mixing_tank_level;
+                    if(data.ec_temp !== undefined) document.getElementById('ec_temp').innerText = data.ec_temp + '°C';
                     document.getElementById('tank_a_bar').style.width = data.tank_a + '%';
                     document.getElementById('tank_b_bar').style.width = data.tank_b + '%';
                     document.getElementById('tank_acid_bar').style.width = data.tank_acid + '%';
@@ -168,6 +174,10 @@ def index():
                             document.getElementById('ph_p_band').value = status.pid.ph_p_band;
                             document.getElementById('flow_pre_control').value = status.pid.flow_pre_control;
                             document.getElementById('target_water_temp').value = status.pid.target_water_temp;
+                            document.getElementById('valve_min_capacity').value = status.pid.valve_min_capacity;
+                            document.getElementById('valve_max_capacity').value = status.pid.valve_max_capacity;
+                            document.getElementById('ec_fine_tuning').value = status.pid.ec_fine_tuning;
+                            document.getElementById('ec_high_speed_close').value = status.pid.ec_high_speed_close;
                         }
                     }
                 });
@@ -211,7 +221,11 @@ def index():
                     ec_p_band: parseFloat(document.getElementById('ec_p_band').value),
                     ph_p_band: parseFloat(document.getElementById('ph_p_band').value),
                     flow_pre_control: parseFloat(document.getElementById('flow_pre_control').value),
-                    target_water_temp: parseFloat(document.getElementById('target_water_temp').value)
+                    target_water_temp: parseFloat(document.getElementById('target_water_temp').value),
+                    valve_min_capacity: parseFloat(document.getElementById('valve_min_capacity').value),
+                    valve_max_capacity: parseFloat(document.getElementById('valve_max_capacity').value),
+                    ec_fine_tuning: parseFloat(document.getElementById('ec_fine_tuning').value),
+                    ec_high_speed_close: parseFloat(document.getElementById('ec_high_speed_close').value)
                 };
                 fetch('/api/pid/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(s) }).then(() => alert('PID 설정 저장됨'));
             }
@@ -236,7 +250,11 @@ def get_status():
             "ec_p_band": getattr(state.control, "ec_p_band", 10.0),
             "ph_p_band": getattr(state.control, "ph_p_band", 10.0),
             "flow_pre_control": getattr(state.control, "flow_pre_control", 50.0),
-            "target_water_temp": getattr(state.control, "target_water_temp", 20.0)
+            "target_water_temp": getattr(state.control, "target_water_temp", 20.0),
+            "valve_min_capacity": getattr(state.control, "valve_min_capacity", 0.0),
+            "valve_max_capacity": getattr(state.control, "valve_max_capacity", 100.0),
+            "ec_fine_tuning": getattr(state.control, "ec_fine_tuning", 0.3),
+            "ec_high_speed_close": getattr(state.control, "ec_high_speed_close", 1.0)
         }
     })
 
@@ -256,10 +274,18 @@ def update_pid():
     state.control.ph_p_band = data.get('ph_p_band', 10.0)
     state.control.flow_pre_control = data.get('flow_pre_control', 50.0)
     state.control.target_water_temp = data.get('target_water_temp', 20.0)
+    state.control.valve_min_capacity = data.get('valve_min_capacity', 0.0)
+    state.control.valve_max_capacity = data.get('valve_max_capacity', 100.0)
+    state.control.ec_fine_tuning = data.get('ec_fine_tuning', 0.3)
+    state.control.ec_high_speed_close = data.get('ec_high_speed_close', 1.0)
     state.db.set_config("ec_p_band", state.control.ec_p_band)
     state.db.set_config("ph_p_band", state.control.ph_p_band)
     state.db.set_config("flow_pre_control", state.control.flow_pre_control)
     state.db.set_config("target_water_temp", state.control.target_water_temp)
+    state.db.set_config("valve_min_capacity", state.control.valve_min_capacity)
+    state.db.set_config("valve_max_capacity", state.control.valve_max_capacity)
+    state.db.set_config("ec_fine_tuning", state.control.ec_fine_tuning)
+    state.db.set_config("ec_high_speed_close", state.control.ec_high_speed_close)
     return jsonify({"status": "success"})
 
 @app.route('/api/groups')

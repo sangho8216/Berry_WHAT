@@ -50,6 +50,7 @@ class SimulatedCollector(BaseCollector):
             "solar_accumulation": round(self.solar_accumulation, 2),
             "ec": round(self.ec, 2),
             "ph": round(self.ph, 2),
+            "ec_temp": round(self.ec_temp + random.uniform(-0.1, 0.1), 1),
             "tank_a": round(self.tank_a, 1),
             "tank_b": round(self.tank_b, 1),
             "tank_acid": round(self.tank_acid, 1),

@@ -69,6 +69,7 @@ class SystemControl:
         moisture = data.get("moisture", 0)
         curr_ec = data.get("ec", 0)
         curr_ph = data.get("ph", 7)
+        ec_temp = data.get("ec_temp", 25.0)
         now = datetime.now()
 
         # 1. Atmospheric Control (Remains independent)
